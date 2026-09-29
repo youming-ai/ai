@@ -181,13 +181,6 @@ describe('serveExplore', () => {
     const bodies = await Promise.all(settled.map((r) => r.text()));
     expect(bodies.every((b) => b === '{"items":[],"nextCursor":null}')).toBe(true);
   });
-
-  it('bypasses KV entirely for free-text search', async () => {
-    const env = mockEnv({ body: '{"items":[],"nextCursor":null}', at: Date.now() });
-    const res = await serveExplore({ q: 'transfer' }, env, mockCtx());
-    expect(res.headers.get('x-cache')).toBe('MISS'); // never a HIT from KV
-    expect((env.CACHE as ReturnType<typeof mockEnv>['CACHE']).get).not.toHaveBeenCalled();
-  });
 });
 
 // ---- fetch routing ----

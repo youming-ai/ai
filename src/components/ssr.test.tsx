@@ -6,7 +6,6 @@
 import { renderToString } from 'react-dom/server';
 import { expect, it } from 'vitest';
 import { CATEGORIES } from '../categories';
-import { SITE_NAME } from '../site';
 import ExploreView from './explore/ExploreView';
 
 it('renders the Explore shell server-side without touching browser globals', () => {
@@ -16,26 +15,10 @@ it('renders the Explore shell server-side without touching browser globals', () 
       initialFilters={{ categories: [] }}
     />,
   );
-  expect(html).toContain('🤖');
-  expect(html).toContain(SITE_NAME); // carried by the logo's sr-only span
-  expect(html).toContain('Search stories');
+  expect(html).toContain('All links'); // the rail's global row
   // The theme switcher SSRs as an icon-less button; localStorage stays
   // unread at render time so the hydration pass always agrees.
   expect(html).toContain('aria-label="Theme"');
-});
-
-it('uses document navigation for search and clearing an initial query', () => {
-  const html = renderToString(
-    <ExploreView
-      initialData={{ items: [], nextCursor: null }}
-      initialFilters={{ categories: [] }}
-      initialSearch="alpha"
-    />,
-  );
-  expect(html).toContain('<form method="get" action="/"');
-  expect(html).toContain('name="q"');
-  expect(html).toContain('value="alpha"');
-  expect(html).toContain('>Clear all</a>');
 });
 
 it('renders article cards server-side', () => {

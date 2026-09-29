@@ -11,10 +11,9 @@ if (!category || !Object.hasOwn(CATEGORIES, category)) {
   return new Response('Not found', { status: 404 });
 }
 const match = CATEGORIES[category]!;
-const initialSearch = Astro.url.searchParams.get('q')?.trim() ?? '';
 const ctx = Astro.locals.cfContext;
 const [initialData, initialFilters] = await Promise.all([
-  getExploreFeed(initialSearch ? { category, q: initialSearch } : { category }, env, ctx),
+  getExploreFeed({ category }, env, ctx),
   getExploreFilters(env, ctx),
 ]);
 // Both the <head> autodiscovery link and the strip's "+ feed" CTA point at
@@ -75,7 +74,6 @@ const jsonLd = [
       initialData={initialData}
       initialFilters={initialFilters}
       initialCategory={category}
-      initialSearch={initialSearch}
       client:load
     />
   </main>

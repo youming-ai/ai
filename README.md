@@ -13,7 +13,7 @@
 
 - **15-min cron ingest** — fetches Poche Explore RSS, de-duplicates by fingerprint + canonical URL + normalized title, and stores new links directly in D1
 - **Direct curation** — no model key, scraper, or external enrichment service is required
-- **KV SWR cache** — `runCached` with stale-while-revalidate, request coalescing, bounded keys (free-text `q` bypasses KV)
+- **KV SWR cache** — `runCached` with stale-while-revalidate, request coalescing, bounded keys (cursor pages bypass KV)
 - **Masonry board** — native CSS multi-column, infinite scroll, per-category `/[category]` hubs
 - **SEO ready** — `/rss.xml`, `/[category]/rss.xml`, `/sitemap.xml`, canonical/og tags, JSON-LD
 
@@ -75,14 +75,14 @@ graph TD
 ```
 
 - **Ingest** — fetches and parses the Poche RSS feed, then writes new links directly to D1.
-- **Reads** — `getExploreFeed` via `runCached`; free-text search bypasses KV (unbounded key space).
+- **Reads** — `getExploreFeed` via `runCached`; cursor pages bypass KV (unbounded key space).
 - **Retention** — archive, never `DELETE` (keeps `fingerprint`/`canonical_url` guards).
 
 ## Product surface
 
 | Route | Description |
 |-------|-------------|
-| `/` | Global board + search + rail |
+| `/` | Global board + rail |
 | `/:category` | Per-category hub (e.g. `/design`) |
 | `/rss.xml`, `/:category/rss.xml` | RSS 2.0 |
 | `/sitemap.xml` | Sitemap — category hubs and feeds |
