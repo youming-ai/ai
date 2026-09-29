@@ -5,10 +5,9 @@ import { getExploreFeed, getExploreFilters } from '../data/api';
 import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN, SITE_TITLE } from '../site';
 import Layout from '../layouts/Layout.astro';
 
-const initialSearch = Astro.url.searchParams.get('q')?.trim() ?? '';
 const ctx = Astro.locals.cfContext;
 const [initialData, initialFilters] = await Promise.all([
-  getExploreFeed(initialSearch ? { q: initialSearch } : {}, env, ctx),
+  getExploreFeed({}, env, ctx),
   getExploreFilters(env, ctx),
 ]);
 const websiteJsonLd = {
@@ -18,14 +17,6 @@ const websiteJsonLd = {
   alternateName: SITE_TITLE,
   url: SITE_ORIGIN,
   description: SITE_DESCRIPTION,
-  potentialAction: {
-    '@type': 'SearchAction',
-    target: {
-      '@type': 'EntryPoint',
-      urlTemplate: `${SITE_ORIGIN}/?q={search_term_string}`,
-    },
-    'query-input': 'required name=search_term_string',
-  },
 };
 ---
 <Layout title={SITE_TITLE}>
@@ -41,7 +32,6 @@ const websiteJsonLd = {
     <ExploreView
       initialData={initialData}
       initialFilters={initialFilters}
-      initialSearch={initialSearch}
       client:load
     />
   </main>

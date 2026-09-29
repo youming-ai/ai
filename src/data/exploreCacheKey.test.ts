@@ -5,10 +5,11 @@ import { serveExplore } from './api';
 
 // The explore cache key embeds the whole normalised query, so any part of it a
 // caller controls freely is a part of the KV keyspace they control freely.
-// Verified against production before this change: four requests varying only
-// `q` left four keys behind —
+// `q` used to be one: four requests varying only it left four keys behind —
 //   explore:{"q":"aaa13317","limit":1} … explore:{"q":"probe19102","limit":1}
-// Nothing authenticates /api/explore, so that is an unbounded write amplifier.
+// Nothing authenticates /api/explore, so that was an unbounded write amplifier.
+// Free-text search is gone now; the cursor is the remaining caller-controlled
+// field, and these tests keep it out of the key space.
 
 function harness(rows: unknown[] = []) {
   const puts: string[] = [];
@@ -35,16 +36,6 @@ function harness(rows: unknown[] = []) {
 afterEach(() => vi.restoreAllMocks());
 
 describe('explore cache keys', () => {
-  it('never writes a cache entry for a free-text search', async () => {
-    const { env, ctx, puts } = harness();
-    for (const q of ['aaa13317', 'bbb22832', 'ccc28721']) {
-      const res = await serveExplore({ q }, env, ctx);
-      expect(res.status).toBe(200);
-      expect(res.headers.get('x-cache')).toBe('MISS');
-    }
-    expect(puts).toEqual([]);
-  });
-
   it('still caches the queries the rail generates', async () => {
     const { env, ctx, puts } = harness();
     await serveExplore({ category: 'tools' }, env, ctx);
@@ -75,7 +66,7 @@ describe('explore cache keys', () => {
     // Re-serialising it is not a bound — the id is taken as-is and the three
     // numbers only have to be finite — so an unauthenticated caller could grind
     // /api/explore?cursor=… and mint a fresh KV key per request. Deep pages now
-    // go straight to D1, the same trade free-text `q` already makes.
+    // go straight to D1.
     const { env, ctx, puts } = harness();
     for (const cursor of [
       '20530:85:1786080856000:abc123',

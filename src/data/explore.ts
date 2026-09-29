@@ -10,7 +10,6 @@ import { renderExploreRss } from './exploreRss';
 
 interface ExploreQuery {
   category?: string;
-  q?: string;
   cursor?: string;
   limit?: number;
 }
@@ -179,7 +178,6 @@ function normalizedExploreQuery(
     : 10;
   return {
     category,
-    q: query.q?.trim().slice(0, 100) || undefined,
     // Re-serialised so a malformed cursor collapses to "first page" instead of
     // becoming its own KV key.
     cursor: canonicalCursor(query.cursor),
@@ -196,11 +194,6 @@ async function queryExplore(query: ExploreQuery, env: Env): Promise<ExploreFeed>
   if (normalized.category) {
     where.push('a.category = ?');
     bindings.push(normalized.category);
-  }
-  if (normalized.q) {
-    const search = `%${normalized.q}%`;
-    where.push('(a.title LIKE ? OR a.ai_summary LIKE ? OR a.ai_blurb LIKE ?)');
-    bindings.push(search, search, search);
   }
   // Strictly after the last row delivered, in the same (day, quality,
   // published_at, id) order the query sorts by. Day bucket is immutable
@@ -238,9 +231,9 @@ export function exploreQueryFromUrl(url: URL): ExploreQuery {
   const limit = limitValue === null ? Number.NaN : Number(limitValue);
   return {
     category: url.searchParams.get('category') ?? undefined,
-    // `source` and `tag` are not read: the rail dropped both, and as free-form
+    // `source`, `tag` and `q` are not read: the rail dropped the first two, and
+    // free-text search was removed with the header's search box. As free-form
     // request input they only widened the KV key space.
-    q: url.searchParams.get('q') ?? undefined,
     cursor: url.searchParams.get('cursor') ?? undefined,
     limit: Number.isFinite(limit) ? limit : undefined,
   };
@@ -253,17 +246,17 @@ export async function serveExplore(
 ): Promise<Response> {
   const normalized = normalizedExploreQuery(query);
 
-  // Free-text search and deep pages bypass KV — both `q` and `cursor` are
-  // user-controlled, so caching them lets an unauthenticated caller write
-  // unlimited KV entries. Re-serialising the cursor is not enough: the id is
-  // taken verbatim and the three numbers only have to be finite, so the key
-  // space is unbounded either way. Page one — nearly all the traffic — still
-  // caches, and later pages of an infinite scroll rarely hit a warm entry.
-  if (normalized.q || normalized.cursor) {
+  // Deep pages bypass KV — `cursor` is user-controlled, so caching it lets an
+  // unauthenticated caller write unlimited KV entries. Re-serialising the cursor
+  // is not enough: the id is taken verbatim and the three numbers only have to
+  // be finite, so the key space is unbounded either way. Page one — nearly all
+  // the traffic — still caches, and later pages of an infinite scroll rarely hit
+  // a warm entry.
+  if (normalized.cursor) {
     try {
       return json(JSON.stringify(await queryExplore(normalized, env)), 200, 'MISS');
     } catch (error) {
-      console.error('[data] explore search failed:', error);
+      console.error('[data] explore page failed:', error);
       return json('{"error":"upstream unavailable"}', 502, 'MISS');
     }
   }
@@ -295,20 +288,18 @@ export async function serveExplore(
  *  raising one silently shrank the other. Exported for the test that pins it. */
 export const EXPLORE_MAX_LIMIT = 24;
 
-/** RSS 2.0 surface for the Explore feed. Drops `q` (transient) and `cursor`
- *  (subscribers take the head, not paginate); keeps the category so a per-hub
- *  feed stays its own cache entry. Same SWR freshness/cache as the JSON
- *  endpoint. */
+/** RSS 2.0 surface for the Explore feed. Drops `cursor` (subscribers take the
+ *  head, not paginate); keeps the category so a per-hub feed stays its own cache
+ *  entry. Same SWR freshness/cache as the JSON endpoint. */
 export async function serveExploreRss(
   query: ExploreQuery,
   env: Env,
   ctx: ExecutionContext,
 ): Promise<Response> {
-  // A feed is the head of the query, nothing transient. Drop search + cursor
-  // before going to KV so the cache key only carries the bookmark-worthy facets.
+  // A feed is the head of the query, nothing transient. Drop the cursor before
+  // going to KV so the cache key only carries the bookmark-worthy facets.
   const normalized = normalizedExploreQuery({
     ...query,
-    q: undefined,
     cursor: undefined,
     limit: EXPLORE_MAX_LIMIT,
   });

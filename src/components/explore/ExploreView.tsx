@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CATEGORIES, CATEGORY_GROUPS } from '../../categories';
 import { GLOBAL_FEED_LABEL } from '../../site';
 import type { ExploreFeed, ExploreFilterOption, ExploreFilterSet } from '../../types';
-import Logo from '../Logo';
 import ThemeSwitcher from '../ThemeSwitcher';
 import ExploreCard from './ExploreCard';
 
@@ -14,7 +13,6 @@ const MASONRY_CLASS =
 
 interface ExploreQueryState {
   category: string;
-  q: string;
   /** Opaque page boundary from the API; '' means the first page. */
   cursor: string;
 }
@@ -32,7 +30,6 @@ function feedKey(query: ExploreQueryState): string {
 function apiUrl(query: ExploreQueryState): string {
   const params = new URLSearchParams();
   if (query.category) params.set('category', query.category);
-  if (query.q) params.set('q', query.q);
   if (query.cursor) params.set('cursor', query.cursor);
   params.set('limit', '24');
   return `/api/explore?${params}`;
@@ -135,16 +132,13 @@ export default function ExploreView({
   initialData,
   initialFilters,
   initialCategory = '',
-  initialSearch = '',
 }: {
   initialData: ExploreFeed;
   initialFilters: ExploreFilterSet;
   initialCategory?: string;
-  initialSearch?: string;
 }) {
   const initialQuery: ExploreQueryState = {
     category: initialCategory,
-    q: initialSearch,
     cursor: '',
   };
   const [query, setQuery] = useState(initialQuery);
@@ -160,7 +154,7 @@ export default function ExploreView({
   const currentFeedKey = useMemo(() => feedKey(query), [query]);
 
   // Category pages carry a scope label for the mobile disclosure; the header
-  // bar itself stays a four-element strip: logo, search, layout, theme.
+  // bar itself is a two-element strip: layout, theme.
   const scopeLabel = initialCategory ? (CATEGORIES[initialCategory]?.label ?? initialCategory) : '';
 
   useEffect(() => {
@@ -215,16 +209,6 @@ export default function ExploreView({
     return () => observer.disconnect();
   }, [currentFeedKey, loadedFeedKey, loading, nextCursor]);
 
-  // Search is a normal GET navigation: the form submits to the hub URL and
-  // clearing is a real link back to it. The document reload keeps the SSR
-  // payload and island state on the same query instead of mutating history
-  // from the client.
-  const hubHref = initialCategory ? `/${initialCategory}` : '/';
-  const activeFacets: { key: string; label: string; href: string }[] = [];
-  if (query.q) {
-    activeFacets.push({ key: `q:${query.q}`, label: `“${query.q}”`, href: hubHref });
-  }
-
   // An outage is either what SSR was handed ("unavailable") or what a client
   // fetch reported (its message set in `error`) — neither is an empty corpus.
   const unavailable = Boolean(initialData.unavailable) || (error !== '' && items.length === 0);
@@ -276,42 +260,7 @@ export default function ExploreView({
   return (
     <div className="desk-shell">
       <div className="sticky top-0 z-30 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line/40 bg-night/95 px-3 py-1.5 backdrop-blur-md lg:h-[var(--h-bar)] lg:flex-nowrap lg:py-0">
-        <Logo />
-
-        <form
-          method="get"
-          action={hubHref}
-          className="relative flex min-w-0 flex-1 sm:max-w-md lg:ml-8 lg:mr-auto lg:max-w-sm"
-        >
-          <label className="sr-only" htmlFor="explore-search">
-            Search explore links
-          </label>
-          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-chalkdim">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 20 20"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              className="h-3.5 w-3.5"
-              aria-hidden="true"
-            >
-              <circle cx="9" cy="9" r="6" />
-              <path d="m14.5 14.5 3.5 3.5" />
-            </svg>
-          </span>
-          <input
-            id="explore-search"
-            name="q"
-            defaultValue={initialSearch}
-            placeholder="Search stories"
-            enterKeyHint="search"
-            className="ds-input max-sm:text-base min-h-9 min-w-0 flex-1 py-1 pl-8"
-          />
-        </form>
-
-        <div className="flex items-center gap-2 lg:ml-auto">
+        <div className="flex items-center gap-2 ml-auto">
           <fieldset className="ds-segmented shrink-0">
             <legend className="sr-only">Feed layout</legend>
             <button
@@ -335,32 +284,6 @@ export default function ExploreView({
           <ThemeSwitcher />
         </div>
       </div>
-
-      {activeFacets.length > 0 && (
-        <nav
-          className="flex flex-wrap items-center gap-2 border-b border-line/40 bg-night/40 px-3 py-2 ds-caption text-chalkdim"
-          aria-label="Active filters"
-        >
-          <span className="uppercase tracking-caption">Filtering by</span>
-          {activeFacets.map((facet) => (
-            <a
-              key={facet.key}
-              href={facet.href}
-              className="inline-flex items-center gap-1 rounded-pill border border-line/40 bg-panel/70 px-2 py-0.5 uppercase tracking-caption hover:border-pitch/50 hover:text-chalk ds-press"
-            >
-              <span>{facet.label}</span>
-              <span aria-hidden="true">×</span>
-              <span className="sr-only">Remove {facet.label} filter</span>
-            </a>
-          ))}
-          <a
-            href={hubHref}
-            className="ml-auto uppercase tracking-caption text-pitch underline-offset-4 hover:underline"
-          >
-            Clear all
-          </a>
-        </nav>
-      )}
 
       <div className="flex">
         <aside className="no-scrollbar sticky top-[var(--h-bar)] hidden h-[calc(100vh-var(--h-bar))] w-52 shrink-0 self-start overflow-y-auto border-r border-line/40 p-2 lg:block">
