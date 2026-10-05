@@ -42,6 +42,16 @@ export default function ExploreCard({
   const domain = article.sourceDomain || 'source';
   const description = articleDeck(article);
 
+  // Lowercase, and spread rather than written as `fetchPriority`: React 18 does
+  // not know that spelling and logs "React does not recognize the
+  // `fetchPriority` prop on a DOM element" — an error-level line in `astro dev`
+  // — before passing it through as a custom attribute anyway. React 19 accepts
+  // both, and the lowercase form is the one it forwards to the DOM. The cast is
+  // only because @types/react 18 declares the camelCase name.
+  const priorityAttrs = priority
+    ? ({ fetchpriority: 'high' } as React.ImgHTMLAttributes<HTMLImageElement>)
+    : {};
+
   // Engage the shimmer only when the image is genuinely still loading at
   // hydration — cached / already-complete images stay visible and never flash.
   const imgRef = useRef<HTMLImageElement>(null);
@@ -176,12 +186,12 @@ export default function ExploreCard({
             ) : (
               <img
                 ref={imgRef}
+                {...priorityAttrs}
                 src={article.imageUrl}
                 alt=""
                 decoding="async"
                 className={`h-full w-full object-cover transition-opacity duration-300${showShimmer ? ' opacity-0' : ' opacity-100'}`}
                 loading={priority ? 'eager' : 'lazy'}
-                fetchPriority={priority ? 'high' : undefined}
                 onLoad={() => setImgLoaded(true)}
                 onError={(event) => {
                   event.currentTarget.style.display = 'none';

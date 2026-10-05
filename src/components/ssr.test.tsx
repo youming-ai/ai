@@ -279,13 +279,15 @@ it('loads only the first cards eagerly, at high priority', () => {
 
   const eager = html.match(/loading="eager"/g) ?? [];
   const lazy = html.match(/loading="lazy"/g) ?? [];
-  // Case-insensitive on purpose: React 18 renders the camelCase `fetchPriority`
-  // it was given, and HTML attribute names are case-insensitive, so the browser
-  // applies `fetchpriority` either way. React 19 lowercases it.
-  const high = html.match(/fetchpriority="high"/gi) ?? [];
+  // Lowercase, and exact: React 18 warns on the camelCase `fetchPriority` prop
+  // (React 19 accepts it), so the attribute is spread in lowercase — which this
+  // asserts, because a regression to the camelCase spelling reintroduces an
+  // error-level line in `astro dev` and only *happens* to work in a browser,
+  // whose HTML parser lowercases attribute names.
+  const high = html.match(/fetchpriority="high"/g) ?? [];
+  expect(high).toHaveLength(ABOVE_THE_FOLD_CARDS);
   expect(eager).toHaveLength(ABOVE_THE_FOLD_CARDS);
   expect(lazy).toHaveLength(items.length - ABOVE_THE_FOLD_CARDS);
-  expect(high).toHaveLength(ABOVE_THE_FOLD_CARDS);
   // A knob, not a contract — but one that stops being a hint if it grows to
   // cover the page, which is the failure this guards.
   expect(ABOVE_THE_FOLD_CARDS).toBeGreaterThanOrEqual(1);
