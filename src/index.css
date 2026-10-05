@@ -232,12 +232,18 @@
     @apply relative;
     /* Off-screen cards skip layout and paint entirely until they scroll near.
        Measured on the perf harness at a fixed 130-card board, A/B on one build:
-       style recalculation 592ms -> 240ms, layout 123ms -> 74ms, layout count
-       103 -> 69. `contain-intrinsic-size` keeps the scrollbar and the column
-       balance honest: `auto` remembers each card's last rendered size, and the
-       400px is only the first-guess fallback for a card that has never been
-       rendered (a ~408px card in the 3-column desktop layout — at 320px the
-       document came out 4% short, which is scrollbar jitter). */
+       layout 66ms -> 49ms, style recalculation 85ms -> 72ms, and CLS during
+       scroll 1.42 -> 0.66. Modest — and worth recording that it *was* dramatic
+       (592ms -> 240ms style) back when every appended page was a React
+       re-render: most of that cost was React rebuilding the tree, not the
+       layout engine handling off-screen cards. Removing the island took the
+       same measurement down to what is quoted above, which is the honest
+       value of this rule now.
+       `contain-intrinsic-size` keeps the scrollbar and the column balance
+       honest: `auto` remembers each card's last rendered size, and the 400px is
+       only the first-guess fallback for a card that has never been rendered (a
+       ~408px card in the 3-column desktop layout — at 320px the document came
+       out 4% short, which is scrollbar jitter). */
     content-visibility: auto;
     contain-intrinsic-size: auto 400px;
   }

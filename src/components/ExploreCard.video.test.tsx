@@ -1,13 +1,16 @@
 import { render } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { ExploreArticle } from '../types';
 import ExploreCard from './explore/ExploreCard';
 
 // The card's video preview is the one place the app animates without the reader
-// asking. Two behaviours need pinning and neither is visible in SSR markup:
-// playback is started from the effect (never from a rendered `autoplay`, which
-// can fire before hydration), and a reduced-motion reader is left paused on a
-// loaded first frame rather than on an empty box.
+// asking. What can be pinned here is the markup: the looping attributes that
+// make the playback permissible, and the *absence* of `autoplay` — a rendered
+// autoplay can start before the script that checks reduced motion has run.
+//
+// The playback behaviour itself (start, pause on reduced motion, follow a
+// preference change) is `src/scripts/board.ts` now and is tested there; this
+// component is server-rendered and never hydrated.
 
 const video: ExploreArticle = {
   id: 'v1',
@@ -28,115 +31,44 @@ const video: ExploreArticle = {
   freshnessScore: 100,
 };
 
-/** jsdom implements neither playback nor matchMedia; both are stubbed per test. */
-function stubMatchMedia(matches: boolean) {
-  const listeners = new Set<() => void>();
-  const query = {
-    matches,
-    media: '(prefers-reduced-motion: reduce)',
-    addEventListener: (_: string, listener: () => void) => listeners.add(listener),
-    removeEventListener: (_: string, listener: () => void) => listeners.delete(listener),
-  };
-  vi.stubGlobal(
-    'matchMedia',
-    vi.fn(() => query),
-  );
-  return {
-    flip(next: boolean) {
-      Object.defineProperty(query, 'matches', { value: next, configurable: true });
-      for (const listener of listeners) listener();
-    },
-    listenerCount: () => listeners.size,
-  };
-}
-
-// jsdom has no media implementation, so these three are replaced outright.
-// Their original descriptors are captured and restored in afterEach: a direct
-// defineProperty is invisible to `vi.restoreAllMocks()`, so a leaked stub would
-// follow every later test in the file.
-const MEDIA_METHODS = ['play', 'pause', 'load'] as const;
-const originalDescriptors = new Map<string, PropertyDescriptor | undefined>();
-
-function stubPlayback() {
-  const play = vi.fn(async () => {});
-  const pause = vi.fn();
-  const load = vi.fn();
-  for (const [name, value] of [
-    ['play', play],
-    ['pause', pause],
-    ['load', load],
-  ] as const) {
-    if (!originalDescriptors.has(name)) {
-      originalDescriptors.set(
-        name,
-        Object.getOwnPropertyDescriptor(window.HTMLMediaElement.prototype, name),
-      );
-    }
-    Object.defineProperty(window.HTMLMediaElement.prototype, name, {
-      configurable: true,
-      writable: true,
-      value,
-    });
-  }
-  return { play, pause, load };
-}
-
-afterEach(() => {
-  for (const name of MEDIA_METHODS) {
-    const descriptor = originalDescriptors.get(name);
-    if (descriptor) {
-      Object.defineProperty(window.HTMLMediaElement.prototype, name, descriptor);
-    } else {
-      delete (window.HTMLMediaElement.prototype as unknown as Record<string, unknown>)[name];
-    }
-  }
-  originalDescriptors.clear();
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-});
-
-describe('ExploreCard video preview', () => {
-  it('never renders an autoplay attribute, and starts playback from the effect', () => {
-    stubMatchMedia(false);
-    const { play } = stubPlayback();
+describe('ExploreCard video preview markup', () => {
+  it('never renders an autoplay attribute, and preloads nothing', () => {
+    // `muted`/`loop`/`playsInline` are asserted against the *server-rendered*
+    // markup in ssr.test.tsx — that is what ships. React sets them as DOM
+    // properties on the client, so `hasAttribute` is false here even though the
+    // rendered HTML carries them, and asserting it here would be a lie about
+    // what the browser receives.
     const { container } = render(<ExploreCard article={video} />);
-
     const element = container.querySelector('video');
+
     expect(element).not.toBeNull();
-    // A rendered attribute would start the loop before this island hydrates.
+    // A rendered autoplay would start the loop before the script that checks
+    // reduced motion has run.
     expect(element!.hasAttribute('autoplay')).toBe(false);
-    expect(play).toHaveBeenCalledOnce();
+    expect(element!.getAttribute('preload')).toBe('none');
   });
 
-  it('leaves a reduced-motion reader paused on a loaded frame', () => {
-    stubMatchMedia(true);
-    const { play, pause, load } = stubPlayback();
+  it('marks the preview for the script that starts it', () => {
+    // Without this hook a video thumbnail would never play: the component is
+    // not hydrated, so there is nothing else to start it.
     const { container } = render(<ExploreCard article={video} />);
-
-    expect(play).not.toHaveBeenCalled();
-    expect(pause).toHaveBeenCalled();
-    // preload="none" would leave the paused video with nothing to paint.
-    expect(load).toHaveBeenCalled();
-    expect(container.querySelector('video')!.getAttribute('preload')).toBe('metadata');
+    expect(container.querySelector('video')?.hasAttribute('data-preview')).toBe(true);
+    expect(container.querySelector('[data-image-frame]')).not.toBeNull();
   });
 
-  it('follows a preference change while the page is open', () => {
-    const media = stubMatchMedia(true);
-    const { play } = stubPlayback();
-    render(<ExploreCard article={video} />);
-    expect(play).not.toHaveBeenCalled();
-
-    media.flip(false);
-    expect(play).toHaveBeenCalledOnce();
+  it('keeps the preview decorative', () => {
+    // A control-less, loop-only video has nothing to announce, and the wrapping
+    // link already carries the article title.
+    const { container } = render(<ExploreCard article={video} />);
+    const element = container.querySelector('video');
+    expect(element!.getAttribute('aria-hidden')).toBe('true');
+    expect(element!.hasAttribute('aria-label')).toBe(false);
   });
 
-  it('unsubscribes from the media query on unmount', () => {
-    const media = stubMatchMedia(false);
-    stubPlayback();
-    const { unmount } = render(<ExploreCard article={video} />);
-    expect(media.listenerCount()).toBe(1);
-
-    unmount();
-    expect(media.listenerCount()).toBe(0);
+  it('seeks to a first frame rather than starting at zero', () => {
+    // A metadata-only preload paints nothing on some browsers unless the URL
+    // asks for a moment past the start.
+    const { container } = render(<ExploreCard article={video} />);
+    expect(container.querySelector('video')!.getAttribute('src')).toContain('#t=0.1');
   });
 });

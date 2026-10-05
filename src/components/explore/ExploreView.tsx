@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
 import { CATEGORIES, CATEGORY_GROUPS } from '../../categories';
 import { GLOBAL_FEED_LABEL } from '../../site';
 import type { ExploreFeed, ExploreFilterOption, ExploreFilterSet } from '../../types';
@@ -23,17 +22,7 @@ const MASONRY_CLASS =
  *  that pins the eager/lazy boundary cannot drift from the value. */
 export const ABOVE_THE_FOLD_CARDS = 4;
 
-type ViewMode = 'grid' | 'list';
-
-/** One API page: the hub's head when `cursor` is empty, that page of it
- *  otherwise. */
-function apiUrl(category: string, cursor: string): string {
-  const params = new URLSearchParams();
-  if (category) params.set('category', category);
-  if (cursor) params.set('cursor', cursor);
-  params.set('limit', '24');
-  return `/api/explore?${params}`;
-}
+export type ViewMode = 'grid' | 'list';
 
 /** One category link in the rail. */
 function SkeletonCards({ count }: { count: number }) {
@@ -128,94 +117,30 @@ function CategoryRail({
   );
 }
 
+/** The board.
+ *
+ *  Server-rendered and **not hydrated**: `src/scripts/board.ts` handles the
+ *  three things that need to happen after paint — appending the next page
+ *  (fetching HTML the server already rendered), switching the theme, and
+ *  starting the looping video thumbnails. Everything else here is markup.
+ *
+ *  That is why `view` is a prop rather than state: the toggle is two links, so
+ *  switching layout is a document navigation like every other link on the page,
+ *  and the URL carries the choice. */
 export default function ExploreView({
   initialData,
   initialFilters,
   initialCategory = '',
+  initialView = 'grid',
 }: {
   initialData: ExploreFeed;
   initialFilters: ExploreFilterSet;
   initialCategory?: string;
+  initialView?: ViewMode;
 }) {
-  // One axis of client-side state, because only one can vary without a document
-  // load: the rail renders <a href> links, so switching hub remounts this island
-  // with a fresh SSR payload. `cursor` is therefore the only value that changes
-  // here, and '' doubles as "the SSR'd first page is what is on screen" — which
-  // is what lets the fetch effect below skip its mount run.
-  //
-  // `attempt` exists because the cursor alone cannot express *ask again for the
-  // page you just failed to load*: after a failure the cursor already equals the
-  // one in flight, React bails on an identical state update, and the effect never
-  // re-runs — leaving "Load more" enabled and inert until a reload. The token is
-  // what makes a repeat request a new one.
-  const [cursor, setCursor] = useState('');
-  const [attempt, setAttempt] = useState(0);
-  const [items, setItems] = useState(initialData.items);
-  const [nextCursor, setNextCursor] = useState(initialData.nextCursor);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const sentinelRef = useRef<HTMLDivElement>(null);
-
-  // Category pages carry a scope label for the mobile disclosure.
   const scopeLabel = initialCategory ? (CATEGORIES[initialCategory]?.label ?? initialCategory) : '';
-
-  /** Request the page the API last handed us. Used by both the button and the
-   *  sentinel, and re-usable for the page already requested: the token bump is
-   *  what turns a repeat into a request. */
-  const requestNextPage = useCallback((next: string) => {
-    setCursor(next);
-    setAttempt((count) => count + 1);
-  }, []);
-
-  useEffect(() => {
-    // '' is the page SSR already rendered, so the first fetch is the first
-    // append. Everything below is the append path only.
-    if (!cursor) return;
-
-    const controller = new AbortController();
-    setLoading(true);
-    setError('');
-    fetch(apiUrl(initialCategory, cursor), { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error('The news feed is temporarily unavailable.');
-        return (await response.json()) as ExploreFeed;
-      })
-      .then((feed) => {
-        if (controller.signal.aborted) return;
-        setItems((previous) => [...previous, ...feed.items]);
-        setNextCursor(feed.nextCursor);
-      })
-      .catch((reason: unknown) => {
-        if (reason instanceof DOMException && reason.name === 'AbortError') return;
-        setError(reason instanceof Error ? reason.message : 'Could not load the news feed.');
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [cursor, attempt, initialCategory]);
-
-  // Infinite scroll: re-running on [nextCursor, loading] is what makes it
-  // repeat. Appending rows fires no new intersection event, so the observer is
-  // rebuilt after each page.
-  useEffect(() => {
-    const node = sentinelRef.current;
-    if (!node || nextCursor === null || loading) return;
-    const next = nextCursor;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) requestNextPage(next);
-      },
-      { rootMargin: '600px' },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [loading, nextCursor, requestNextPage]);
-
-  // An outage is either what SSR was handed ("unavailable") or what a client
-  // fetch reported (its message set in `error`) — neither is an empty corpus.
-  const unavailable = Boolean(initialData.unavailable) || (error !== '' && items.length === 0);
+  const cursor = initialData.nextCursor ?? '';
+  const hasItems = initialData.items.length > 0;
 
   const rail: ReactNode = (
     <CategoryRail
@@ -230,23 +155,18 @@ export default function ExploreView({
     />
   );
 
-  const feed =
-    loading && items.length === 0 ? (
-      <div className={MASONRY_CLASS} role="status">
-        <span className="sr-only">Loading explore links</span>
-        <SkeletonCards count={8} />
-      </div>
-    ) : items.length === 0 && unavailable ? (
-      <p className="p-16 text-center ds-body text-chalkdim">
-        The explore feed is temporarily unavailable. Reload in a moment.
-      </p>
-    ) : items.length === 0 ? (
-      <p className="p-16 text-center ds-body text-chalkdim">
-        No links match these filters. Clear one to widen the explore feed.
-      </p>
-    ) : viewMode === 'list' ? (
-      <ol className="divide-y divide-line/30 border-b border-line/30" aria-label="Explore links">
-        {items.map((article) => (
+  const boardClass =
+    initialView === 'list' ? 'divide-y divide-line/30 border-b border-line/30' : MASONRY_CLASS;
+  const cards =
+    initialView === 'list' ? (
+      <ol
+        data-board
+        data-view="list"
+        data-category={initialCategory}
+        className={boardClass}
+        aria-label="Explore links"
+      >
+        {initialData.items.map((article) => (
           <ExploreCard key={article.id} article={article} variant="list" />
         ))}
       </ol>
@@ -254,38 +174,50 @@ export default function ExploreView({
       // Native CSS multi-column, not a masonry lib. Fills column-major
       // (items 1..n down column 1); swap in an SSR round-robin split if
       // reading order ever has to be exact.
-      <section className={MASONRY_CLASS} aria-label="Explore links">
-        {items.map((article, index) => (
+      <section
+        data-board
+        data-view="grid"
+        data-category={initialCategory}
+        className={boardClass}
+        aria-label="Explore links"
+      >
+        {initialData.items.map((article, index) => (
           <ExploreCard key={article.id} article={article} priority={index < ABOVE_THE_FOLD_CARDS} />
         ))}
       </section>
     );
 
+  const feed = !hasItems ? (
+    // An outage is what SSR was handed; a client append failure is announced in
+    // the sentinel instead, and never reaches this branch.
+    <p className="p-16 text-center ds-body text-chalkdim">
+      {initialData.unavailable
+        ? 'The explore feed is temporarily unavailable. Reload in a moment.'
+        : 'No links match these filters. Clear one to widen the explore feed.'}
+    </p>
+  ) : (
+    cards
+  );
+
   // The layout and theme controls live at the foot of the rail, so they appear
   // in the desktop column and at the bottom of the mobile disclosure — the two
-  // places the rail is rendered. Both instances read one `viewMode`, and
-  // ThemeSwitcher keeps its own copies in step through `data-theme`.
+  // places the rail is rendered. The theme control exists twice for the same
+  // reason, and `src/scripts/board.ts` keeps both copies in step through
+  // `data-theme` on the root.
   const controls: ReactNode = (
     <div className="flex items-center gap-2">
-      <fieldset className="ds-segmented shrink-0">
-        <legend className="sr-only">Feed layout</legend>
-        <button
-          type="button"
-          aria-pressed={viewMode === 'grid'}
-          onClick={() => setViewMode('grid')}
-          className={`ds-seg-tab min-h-7 px-3 text-xs ${viewMode === 'grid' ? 'ds-seg-tab-active' : 'ds-seg-tab-inactive'}`}
-        >
-          Grid
-        </button>
-        <button
-          type="button"
-          aria-pressed={viewMode === 'list'}
-          onClick={() => setViewMode('list')}
-          className={`ds-seg-tab min-h-7 px-3 text-xs ${viewMode === 'list' ? 'ds-seg-tab-active' : 'ds-seg-tab-inactive'}`}
-        >
-          List
-        </button>
-      </fieldset>
+      <nav className="ds-segmented shrink-0" aria-label="Feed layout">
+        {(['grid', 'list'] as const).map((view) => (
+          <a
+            key={view}
+            href={`?view=${view}`}
+            aria-current={initialView === view ? 'true' : undefined}
+            className={`ds-seg-tab min-h-7 px-3 text-xs ${initialView === view ? 'ds-seg-tab-active' : 'ds-seg-tab-inactive'}`}
+          >
+            {view === 'grid' ? 'Grid' : 'List'}
+          </a>
+        ))}
+      </nav>
 
       <ThemeSwitcher />
     </div>
@@ -313,14 +245,6 @@ export default function ExploreView({
             </div>
           </details>
 
-          {/* Only for the append path: a first-page failure is the empty state
-              below, and showing both would say the same thing twice. */}
-          {error && items.length > 0 && (
-            <p role="alert" className="px-3 py-2 ds-caption text-live">
-              {error}
-            </p>
-          )}
-
           {/* The skip link's target. It has to exist in every state, including
               the empty and unavailable ones, so it lives on this wrapper rather
               than on the grid/list inside `feed`. tabIndex -1 keeps it out of
@@ -329,31 +253,35 @@ export default function ExploreView({
             {feed}
           </div>
 
-          {/* First-load skeleton lives inside `feed`; this covers the append
-              path during infinite scroll (items still present, rootMargin fires
-              well before the bottom button). */}
-          {loading && items.length > 0 && (
-            <div className={MASONRY_CLASS} role="status" aria-live="polite">
-              <span className="sr-only">Loading more stories</span>
-              <SkeletonCards count={4} />
+          {/* Everything below is written for `src/scripts/board.ts`, which is why
+              it is present but inert in the HTML: with JavaScript off the button
+              does nothing rather than being a dead-looking hidden control, and
+              the end-of-feed note stays server-rendered and correct. */}
+          {hasItems && (
+            <div
+              data-board-sentinel
+              data-cursor={cursor}
+              className="flex flex-col items-center gap-2 py-6"
+              aria-live="polite"
+            >
+              {/* Auto-load covers scrolling; the button is the keyboard / no-IO path. */}
+              <div data-board-loading hidden className={MASONRY_CLASS} role="status">
+                <span className="sr-only">Loading more stories</span>
+                <SkeletonCards count={4} />
+              </div>
+              {cursor !== '' && (
+                <button type="button" data-board-more className="ds-btn-secondary">
+                  Load more stories
+                </button>
+              )}
+              <p data-board-error hidden role="alert" className="ds-caption text-live" />
+              {cursor === '' && (
+                <p className="ds-caption uppercase tracking-caption text-chalkdim">
+                  End of the feed
+                </p>
+              )}
             </div>
           )}
-
-          {/* Auto-load covers scrolling; the button is the keyboard / no-IO path. */}
-          <div ref={sentinelRef} className="flex justify-center py-6" aria-live="polite">
-            {nextCursor !== null ? (
-              <button
-                type="button"
-                onClick={() => requestNextPage(nextCursor)}
-                disabled={loading}
-                className="ds-btn-secondary"
-              >
-                {loading ? 'Loading…' : 'Load more stories'}
-              </button>
-            ) : items.length > 0 ? (
-              <p className="ds-caption uppercase tracking-caption text-chalkdim">End of the feed</p>
-            ) : null}
-          </div>
         </div>
       </div>
     </div>

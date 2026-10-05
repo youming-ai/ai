@@ -169,10 +169,11 @@ describe('design tokens', () => {
     // Not decoration, and nothing else here would notice its removal: the board
     // renders identically with or without it. Measured on the perf harness at a
     // fixed 130-card board, A/B on one build — removing these two declarations
-    // costs 631ms of style recalculation against 272ms, and 128ms of layout
-    // against 66ms. `contain-intrinsic-size` is half the fix: without a
-    // fallback near the real card height the document comes out short and the
-    // scrollbar jitters as cards render.
+    // costs 85ms of style recalculation against 72ms, and 66ms of layout
+    // against 49ms, and doubles CLS during scroll (1.42 against 0.66).
+    // `contain-intrinsic-size` is half the fix: without a fallback near the real
+    // card height the document comes out short and the scrollbar jitters as
+    // cards render.
     const rule = css.match(/\.ds-signal\s*\{[^}]*\}/)?.[0] ?? '';
     expect(rule, '.ds-signal rule in index.css').not.toBe('');
     expect(rule).toContain('content-visibility: auto');

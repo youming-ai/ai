@@ -16,6 +16,9 @@ const [initialData, initialFilters] = await Promise.all([
   getExploreFeed({ category }, env, ctx),
   getExploreFilters(env, ctx),
 ]);
+// The layout toggle is a link, so the choice lives in the URL — one source of
+// truth for the server-rendered board and the appended pages alike.
+const initialView = Astro.url.searchParams.get('view') === 'list' ? 'list' : 'grid';
 // Both the <head> autodiscovery link and the strip's "+ feed" CTA point at
 // this category's feed.
 const feedPath = `/${category}/rss.xml`;
@@ -74,7 +77,10 @@ const jsonLd = [
       initialData={initialData}
       initialFilters={initialFilters}
       initialCategory={category}
-      client:load
+      initialView={initialView}
     />
   </main>
+  <script>
+    import '../../scripts/board';
+  </script>
 </Layout>
