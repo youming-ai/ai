@@ -1,6 +1,6 @@
 import { CATEGORIES } from '../categories';
 import { type Env, runCached } from './cache';
-import { type CountRow, rowNumber, rowString } from './explore';
+import { type CountRow, rowNumber, rowString } from './exploreArticle';
 
 interface SitemapNewsHub {
   category: string;

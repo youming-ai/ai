@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { parseExploreCursor } from './api';
+// The module under test, not the facade: reachable via src/data/api.ts too, but
+// importing the seam directly is what makes the split worth having.
+import { parseExploreCursor } from './exploreCursor';
 
 describe('parseExploreCursor', () => {
   it('splits a cursor into its day, quality, published_at, and id parts', () => {

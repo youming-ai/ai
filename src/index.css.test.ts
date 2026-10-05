@@ -166,11 +166,11 @@ describe('design tokens', () => {
   });
 
   it('keeps the input boundary above 3:1 in both themes', () => {
-    // `.ds-input`'s fill is ~1.1:1 against the page, so its border is the only
-    // cue that a control is there (SC 1.4.11 needs 3:1), which is why it uses
-    // `muted` rather than `line`. Nothing else pins that: the token-sync test
-    // above only compares tokens.json with index.css, so a future retune of
-    // --c-muted could drop the input boundary back under 3:1 silently.
+    // Pinned for the surface a form field will sit on, not for a class: the
+    // app currently renders no <input> (the header's search box was the last
+    // one), so this guards the token pairing itself. SC 1.4.11 needs 3:1, and
+    // the token-sync test above only compares tokens.json with index.css, so a
+    // future retune of --c-muted could drop the boundary silently.
     for (const [name, theme, other] of [
       ['dark', dark, dark],
       ['light', light, dark],

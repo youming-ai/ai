@@ -214,9 +214,36 @@ it('renders rail rows tall enough to tap', () => {
     />,
   );
   // Asserted on the filter link itself: `min-h-7` also appears on the Grid and
-  // List buttons in every fixture, so a page-wide match stays green even if the
-  // rail rows lose it.
+  // List buttons (four of them, two per rail render site), so a page-wide match
+  // stays green even if the rail rows lose it.
   const link = html.match(/<a[^>]*href="\/tools"[^>]*>/)?.[0] ?? '';
   expect(link, 'tools filter link rendered').not.toBe('');
   expect(link).toContain('min-h-7');
+});
+
+it('renders the layout and theme controls with the rail, not in a toolbar', () => {
+  // The toolbar was removed: the rail is the only chrome, and the controls sit
+  // at its foot so they exist in both places it renders — the desktop column
+  // and the mobile disclosure. One copy would strand them on the other side of
+  // the `lg` breakpoint; a toolbar would put them back above the board.
+  const html = renderToString(
+    <ExploreView
+      initialData={{ items: [], nextCursor: null }}
+      initialFilters={{ categories: [] }}
+    />,
+  );
+
+  expect(html.match(/aria-label="Theme"/g)).toHaveLength(2);
+  expect(html.match(/>Grid</g)).toHaveLength(2);
+  expect(html.match(/>List</g)).toHaveLength(2);
+  // At the foot of each rail, not above it: the controls follow the last filter
+  // row in both render sites (2 "Topics" headings, 2 control groups).
+  const railRows = [...html.matchAll(/Topics/g)].map((match) => match.index ?? 0);
+  const themes = [...html.matchAll(/aria-label="Theme"/g)].map((match) => match.index ?? 0);
+  expect(railRows).toHaveLength(2);
+  expect(themes.length).toBe(2);
+  expect(themes[0]).toBeGreaterThan(railRows[0]!);
+  expect(themes[1]).toBeGreaterThan(railRows[1]!);
+  // The removed bar was the only backdrop-blurred surface in the markup.
+  expect(html).not.toContain('backdrop-blur');
 });

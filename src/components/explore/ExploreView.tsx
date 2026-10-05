@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CATEGORIES, CATEGORY_GROUPS } from '../../categories';
 import { GLOBAL_FEED_LABEL } from '../../site';
 import type { ExploreFeed, ExploreFilterOption, ExploreFilterSet } from '../../types';
@@ -11,26 +11,14 @@ import ExploreCard from './ExploreCard';
 const MASONRY_CLASS =
   'columns-1 gap-3 p-3 [column-fill:balance] md:columns-2 xl:columns-3 2xl:columns-4';
 
-interface ExploreQueryState {
-  category: string;
-  /** Opaque page boundary from the API; '' means the first page. */
-  cursor: string;
-}
-
 type ViewMode = 'grid' | 'list';
 
-function queryKey(query: ExploreQueryState): string {
-  return JSON.stringify(query);
-}
-
-function feedKey(query: ExploreQueryState): string {
-  return queryKey({ ...query, cursor: '' });
-}
-
-function apiUrl(query: ExploreQueryState): string {
+/** One API page: the hub's head when `cursor` is empty, that page of it
+ *  otherwise. */
+function apiUrl(category: string, cursor: string): string {
   const params = new URLSearchParams();
-  if (query.category) params.set('category', query.category);
-  if (query.cursor) params.set('cursor', query.cursor);
+  if (category) params.set('category', category);
+  if (cursor) params.set('cursor', cursor);
   params.set('limit', '24');
   return `/api/explore?${params}`;
 }
@@ -137,48 +125,39 @@ export default function ExploreView({
   initialFilters: ExploreFilterSet;
   initialCategory?: string;
 }) {
-  const initialQuery: ExploreQueryState = {
-    category: initialCategory,
-    cursor: '',
-  };
-  const [query, setQuery] = useState(initialQuery);
+  // One axis of client-side state, because only one can vary without a document
+  // load: the rail renders <a href> links, so switching hub remounts this island
+  // with a fresh SSR payload. `cursor` is therefore the only thing that changes
+  // here, and '' doubles as "the SSR'd first page is what is on screen" — which
+  // is what lets the fetch effect below skip its mount run.
+  const [cursor, setCursor] = useState('');
   const [items, setItems] = useState(initialData.items);
   const [nextCursor, setNextCursor] = useState(initialData.nextCursor);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const initialKey = useRef(queryKey(initialQuery));
-  const [loadedFeedKey, setLoadedFeedKey] = useState(() => feedKey(initialQuery));
   const sentinelRef = useRef<HTMLDivElement>(null);
-  const key = useMemo(() => queryKey(query), [query]);
-  const currentFeedKey = useMemo(() => feedKey(query), [query]);
 
-  // Category pages carry a scope label for the mobile disclosure; the header
-  // bar itself is a two-element strip: layout, theme.
+  // Category pages carry a scope label for the mobile disclosure.
   const scopeLabel = initialCategory ? (CATEGORIES[initialCategory]?.label ?? initialCategory) : '';
 
   useEffect(() => {
-    if (initialKey.current === key) {
-      initialKey.current = '';
-      return;
-    }
+    // '' is the page SSR already rendered, so the first fetch is the first
+    // append. Everything below is the append path only.
+    if (!cursor) return;
 
     const controller = new AbortController();
-    const requestFeedKey = currentFeedKey;
-    const isFirstPage = !query.cursor;
-    if (isFirstPage) setNextCursor(null);
     setLoading(true);
     setError('');
-    fetch(apiUrl(query), { signal: controller.signal })
+    fetch(apiUrl(initialCategory, cursor), { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error('The news feed is temporarily unavailable.');
         return (await response.json()) as ExploreFeed;
       })
       .then((feed) => {
         if (controller.signal.aborted) return;
-        setItems((previous) => (query.cursor ? [...previous, ...feed.items] : feed.items));
+        setItems((previous) => [...previous, ...feed.items]);
         setNextCursor(feed.nextCursor);
-        setLoadedFeedKey(requestFeedKey);
       })
       .catch((reason: unknown) => {
         if (reason instanceof DOMException && reason.name === 'AbortError') return;
@@ -188,26 +167,24 @@ export default function ExploreView({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [currentFeedKey, key, query]);
+  }, [cursor, initialCategory]);
 
   // Infinite scroll: re-running on [nextCursor, loading] is what makes it
   // repeat. Appending rows fires no new intersection event, so the observer is
   // rebuilt after each page.
   useEffect(() => {
     const node = sentinelRef.current;
-    if (!node || nextCursor === null || loading || loadedFeedKey !== currentFeedKey) return;
-    const cursor = nextCursor;
+    if (!node || nextCursor === null || loading) return;
+    const next = nextCursor;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setQuery((previous) => ({ ...previous, cursor }));
-        }
+        if (entries.some((entry) => entry.isIntersecting)) setCursor(next);
       },
       { rootMargin: '600px' },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [currentFeedKey, loadedFeedKey, loading, nextCursor]);
+  }, [loading, nextCursor]);
 
   // An outage is either what SSR was handed ("unavailable") or what a client
   // fetch reported (its message set in `error`) — neither is an empty corpus.
@@ -257,37 +234,44 @@ export default function ExploreView({
       </section>
     );
 
+  // The layout and theme controls live at the foot of the rail, so they appear
+  // in the desktop column and at the bottom of the mobile disclosure — the two
+  // places the rail is rendered. Both instances read one `viewMode`, and
+  // ThemeSwitcher keeps its own copies in step through `data-theme`.
+  const controls: ReactNode = (
+    <div className="flex items-center gap-2">
+      <fieldset className="ds-segmented shrink-0">
+        <legend className="sr-only">Feed layout</legend>
+        <button
+          type="button"
+          aria-pressed={viewMode === 'grid'}
+          onClick={() => setViewMode('grid')}
+          className={`ds-seg-tab min-h-7 px-3 text-xs ${viewMode === 'grid' ? 'ds-seg-tab-active' : 'ds-seg-tab-inactive'}`}
+        >
+          Grid
+        </button>
+        <button
+          type="button"
+          aria-pressed={viewMode === 'list'}
+          onClick={() => setViewMode('list')}
+          className={`ds-seg-tab min-h-7 px-3 text-xs ${viewMode === 'list' ? 'ds-seg-tab-active' : 'ds-seg-tab-inactive'}`}
+        >
+          List
+        </button>
+      </fieldset>
+
+      <ThemeSwitcher />
+    </div>
+  );
+
   return (
     <div className="desk-shell">
-      <div className="sticky top-0 z-30 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line/40 bg-night/95 px-3 py-1.5 backdrop-blur-md lg:h-[var(--h-bar)] lg:flex-nowrap lg:py-0">
-        <div className="flex items-center gap-2 ml-auto">
-          <fieldset className="ds-segmented shrink-0">
-            <legend className="sr-only">Feed layout</legend>
-            <button
-              type="button"
-              aria-pressed={viewMode === 'grid'}
-              onClick={() => setViewMode('grid')}
-              className={`ds-seg-tab min-h-7 px-3 text-xs ${viewMode === 'grid' ? 'ds-seg-tab-active' : 'ds-seg-tab-inactive'}`}
-            >
-              Grid
-            </button>
-            <button
-              type="button"
-              aria-pressed={viewMode === 'list'}
-              onClick={() => setViewMode('list')}
-              className={`ds-seg-tab min-h-7 px-3 text-xs ${viewMode === 'list' ? 'ds-seg-tab-active' : 'ds-seg-tab-inactive'}`}
-            >
-              List
-            </button>
-          </fieldset>
-
-          <ThemeSwitcher />
-        </div>
-      </div>
-
       <div className="flex">
-        <aside className="no-scrollbar sticky top-[var(--h-bar)] hidden h-[calc(100vh-var(--h-bar))] w-52 shrink-0 self-start overflow-y-auto border-r border-line/40 p-2 lg:block">
-          {rail}
+        {/* h-screen, not 100vh minus a bar: there is no bar any more. The rail
+            scrolls on its own and the controls stay pinned at its foot. */}
+        <aside className="no-scrollbar sticky top-0 hidden h-screen w-52 shrink-0 self-start flex-col border-r border-line/40 lg:flex">
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">{rail}</div>
+          <div className="shrink-0 border-t border-line/40 p-2">{controls}</div>
         </aside>
 
         <div className="min-w-0 flex-1">
@@ -296,7 +280,10 @@ export default function ExploreView({
             <summary className="cursor-pointer list-none px-3 py-2 ds-caption uppercase tracking-caption text-chalkdim [&::-webkit-details-marker]:hidden">
               Categories {initialCategory ? `· ${scopeLabel}` : ''}
             </summary>
-            <div className="p-2">{rail}</div>
+            <div className="p-2">
+              {rail}
+              <div className="mt-3 border-t border-line/40 pt-3">{controls}</div>
+            </div>
           </details>
 
           {/* Only for the append path: a first-page failure is the empty state
@@ -310,20 +297,14 @@ export default function ExploreView({
           {/* The skip link's target. It has to exist in every state, including
               the empty and unavailable ones, so it lives on this wrapper rather
               than on the grid/list inside `feed`. tabIndex -1 keeps it out of
-              the tab order while letting the link move focus here; scroll-mt
-              keeps the first row clear of the sticky toolbar after the jump
-              (the bar is exactly --h-bar on lg and wraps taller below it). */}
-          <div
-            id="explore-results"
-            tabIndex={-1}
-            className="scroll-mt-20 lg:scroll-mt-[calc(var(--h-bar)+0.5rem)]"
-          >
+              the tab order while letting the link move focus here. */}
+          <div id="explore-results" tabIndex={-1} className="scroll-mt-4">
             {feed}
           </div>
 
           {/* First-load skeleton lives inside `feed`; this covers the append
-              path during infinite scroll and filter changes (items still
-              present, rootMargin fires well before the bottom button). */}
+              path during infinite scroll (items still present, rootMargin fires
+              well before the bottom button). */}
           {loading && items.length > 0 && (
             <div className={MASONRY_CLASS} role="status" aria-live="polite">
               <span className="sr-only">Loading more stories</span>
@@ -336,7 +317,7 @@ export default function ExploreView({
             {nextCursor !== null ? (
               <button
                 type="button"
-                onClick={() => setQuery((previous) => ({ ...previous, cursor: nextCursor }))}
+                onClick={() => setCursor(nextCursor)}
                 disabled={loading}
                 className="ds-btn-secondary"
               >

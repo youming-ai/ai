@@ -3,6 +3,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type Env, json, serveExplore } from '../src/data/api';
+import { SITE_VERSION } from '../src/site';
 import worker from './index';
 
 const fetchMock = vi.fn();
@@ -197,6 +198,69 @@ describe('fetch routing', () => {
     expect(res.headers.get('x-cache')).toBe('MISS');
   });
 
+  it('routes GET /api/health through healthReport', async () => {
+    // The endpoint a monitor hits was unit-tested (health.test.ts) but never
+    // driven through the dispatcher that actually serves it, so a renamed path
+    // or a missing method guard would have shipped green.
+    const env = mockEnv(null);
+    const res = await worker.fetch(new Request('https://x/api/health'), env, mockCtx());
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(await res.json()).toEqual({
+      status: 'ok',
+      version: SITE_VERSION,
+      checks: { d1: 'ok', cache: 'present' },
+    });
+  });
+
+  it('rejects non-GET on /api/health', async () => {
+    const env = mockEnv(null);
+    const res = await worker.fetch(
+      new Request('https://x/api/health', { method: 'POST' }),
+      env,
+      mockCtx(),
+    );
+    expect(res.status).toBe(405);
+  });
+
+  it('answers 503 from /api/health when the D1 probe fails', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const env = mockEnv(null);
+    env.DB = {
+      prepare: vi.fn(() => {
+        throw new Error('d1 down');
+      }),
+    } as unknown as Env['DB'];
+
+    const res = await worker.fetch(new Request('https://x/api/health'), env, mockCtx());
+
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as { status: string }).status).toBe('degraded');
+    expect(logged).toHaveBeenCalledWith('[health] D1 probe failed:', expect.any(Error));
+  });
+
+  it('turns an escaping throw into a 500 rather than an unhandled rejection', async () => {
+    // Every route handler swallows its own failures, so the dispatcher's last
+    // line of defence is only reachable by a throw in the routing itself — and
+    // `new URL(request.url)` is the first thing it does. Without the catch this
+    // escapes as a platform 500 with no JSON body and no log naming the worker.
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const env = mockEnv(null);
+    const broken = {
+      get url(): string {
+        throw new Error('plumbing failed');
+      },
+    } as unknown as Request;
+
+    const res = await worker.fetch(broken, env, mockCtx());
+
+    expect(res.status).toBe(500);
+    expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8');
+    expect(await res.json()).toEqual({ error: 'internal' });
+    expect(logged).toHaveBeenCalledWith('[worker] unhandled error:', expect.any(Error));
+  });
+
   it('rejects non-GET on /api/explore', async () => {
     const env = mockEnv(null);
     const res = await worker.fetch(
@@ -220,6 +284,16 @@ describe('fetch routing', () => {
     // `total` rides along: it counts the rows no hub holds, which the option
     // list cannot express.
     expect(await res.json()).toEqual({ categories: [], total: 0 });
+  });
+
+  it('rejects non-GET on /api/explore/filters', async () => {
+    const env = mockEnv(null);
+    const res = await worker.fetch(
+      new Request('https://x/api/explore/filters', { method: 'POST' }),
+      env,
+      mockCtx(),
+    );
+    expect(res.status).toBe(405);
   });
 
   it('404s on an unknown /api/ path', async () => {

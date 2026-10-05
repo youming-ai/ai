@@ -14,18 +14,42 @@ function detectTheme(): Theme {
   return 'dark';
 }
 
+/** The theme currently in force, per the document — the one place every
+ *  instance reads from. Falls back to storage only when the attribute is
+ *  missing, which is the case when the inline script in Layout has not run
+ *  (tests, or a document that never booted it). */
+function currentTheme(): Theme {
+  const applied = document.documentElement.dataset.theme;
+  if (applied === 'dark' || applied === 'light') return applied;
+  return detectTheme();
+}
+
 // `theme` starts null so the server and the first client render agree on an
 // icon-less button: this renders inside an SSR'd `client:load` island, so
 // reading localStorage during render would be a hydration mismatch. The
 // inline script in Layout has already painted the right theme by then —
 // this only catches the button up.
+//
+// There is more than one instance now (the rail renders the controls on both
+// the desktop column and the mobile disclosure), so `data-theme` is the shared
+// source of truth rather than this component's state: whichever button is
+// clicked updates the attribute, and the observer is what brings the other
+// instance — and any future one — along with it.
 export default function ThemeSwitcher() {
   const [theme, setTheme] = useState<Theme | null>(null);
 
   useEffect(() => {
-    const stored = detectTheme();
-    setTheme(stored);
-    document.documentElement.dataset.theme = stored;
+    const root = document.documentElement;
+    const initial = currentTheme();
+    // Adopt it once so the attribute is always set for the observers to see.
+    if (root.dataset.theme !== initial) root.dataset.theme = initial;
+    setTheme(initial);
+
+    // Sets state only — writing the attribute from here would re-enter the
+    // observer, since setAttribute queues a record even for an unchanged value.
+    const observer = new MutationObserver(() => setTheme(currentTheme()));
+    observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
   }, []);
 
   const cycle = () => {
@@ -36,6 +60,7 @@ export default function ThemeSwitcher() {
       /* private mode / storage disabled */
     }
     document.documentElement.dataset.theme = next;
+    // Optimistic, so this instance's own label turns over in the same tick.
     setTheme(next);
   };
 

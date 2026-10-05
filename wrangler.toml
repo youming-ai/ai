@@ -1,4 +1,6 @@
-# Static SPA + a Worker that edge-caches the upstream data APIs in KV.
+# Astro SSR on Workers: a D1-backed explore feed with a KV SWR cache in front of
+# it. The cron pulls the curated Poche Explore RSS into D1; `/media/*` is relayed
+# by the entrypoint before Astro sees the request.
 name = "umuo"
 compatibility_date = "2026-07-17"
 compatibility_flags = ["nodejs_compat"]
