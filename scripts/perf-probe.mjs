@@ -9,7 +9,7 @@
 // the request list so a change in what the browser fetches (not only how fast)
 // is visible.
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -37,6 +37,17 @@ const SCROLL_UNTIL = Number(arg('scroll-until', '130'));
  *  one build instead of two — used to disable `content-visibility` in the
  *  control arm, so the bundle, the corpus and the machine are all identical. */
 const OVERRIDE_CSS = arg('override-css', '');
+/** PNG path: capture the viewport after the page settles (and after the scroll
+ *  phase, if any). A change to layout has to be *looked at*, not only measured —
+ *  this is what makes that possible from here. */
+const SCREENSHOT = arg('screenshot', '');
+/** `WxH`, e.g. 390x844 for a phone. */
+const VIEWPORT = arg('viewport', '1440x900');
+/** Run this JS after settling, before measuring and capturing — how a test
+ *  drives something the URL cannot (a client-state toggle, for instance). */
+const POST_EVAL = arg('eval', '');
+/** Capture the whole document rather than the viewport. */
+const FULL_PAGE = args.includes('--full-page');
 
 const NET_PROFILES = {
   // Lighthouse-ish "Slow 4G": download 1.6 Mbit/s, 150 ms RTT.
@@ -164,9 +175,10 @@ try {
     await page.send('Network.setCacheDisabled', { cacheDisabled: true });
     await page.send('Network.emulateNetworkConditions', NET_PROFILES[NET] ?? NET_PROFILES.slow4g);
     await page.send('Emulation.setCPUThrottlingRate', { rate: CPU });
+    const [viewW, viewH] = VIEWPORT.split('x').map(Number);
     await page.send('Emulation.setDeviceMetricsOverride', {
-      width: 1440,
-      height: 900,
+      width: Number.isFinite(viewW) ? viewW : 1440,
+      height: Number.isFinite(viewH) ? viewH : 900,
       deviceScaleFactor: 1,
       mobile: false,
     });
@@ -249,6 +261,19 @@ try {
         layouts: after.layoutCount - before.layoutCount,
         nodes: after.nodes - before.nodes,
       };
+    }
+
+    if (POST_EVAL) {
+      await page.send('Runtime.evaluate', { expression: POST_EVAL });
+      await sleep(600);
+    }
+
+    if (SCREENSHOT && run === RUNS) {
+      const shot = await page.send('Page.captureScreenshot', {
+        format: 'png',
+        captureBeyondViewport: FULL_PAGE,
+      });
+      writeFileSync(SCREENSHOT, Buffer.from(shot.data, 'base64'));
     }
 
     const evaluated = await page.send('Runtime.evaluate', {
