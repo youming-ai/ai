@@ -28,6 +28,15 @@ const CPU = Number(arg('cpu', '4'));
 const NET = arg('net', 'slow4g');
 const LABEL = arg('label', 'run');
 const JSON_OUT = arg('json', '');
+/** Max scroll-to-bottom steps; 0 disables the long-board phase. */
+const SCROLL_STEPS = Number(arg('scroll', '0'));
+/** Stop scrolling once the board holds this many cards, so two configurations
+ *  are compared at the same DOM size. */
+const SCROLL_UNTIL = Number(arg('scroll-until', '130'));
+/** CSS appended to <head> before first paint, for A/B-ing a rendering change on
+ *  one build instead of two — used to disable `content-visibility` in the
+ *  control arm, so the bundle, the corpus and the machine are all identical. */
+const OVERRIDE_CSS = arg('override-css', '');
 
 const NET_PROFILES = {
   // Lighthouse-ish "Slow 4G": download 1.6 Mbit/s, 150 ms RTT.
@@ -162,6 +171,15 @@ try {
       mobile: false,
     });
     await page.send('Page.addScriptToEvaluateOnNewDocument', { source: OBSERVER_SOURCE });
+    if (OVERRIDE_CSS) {
+      await page.send('Page.addScriptToEvaluateOnNewDocument', {
+        source: `document.addEventListener('DOMContentLoaded', () => {
+          const style = document.createElement('style');
+          style.textContent = ${JSON.stringify(OVERRIDE_CSS)};
+          document.head.appendChild(style);
+        });`,
+      });
+    }
 
     const loaded = page.once('Page.loadEventFired');
     const t0 = Date.now();
@@ -169,6 +187,69 @@ try {
     await loaded;
     const loadMs = Date.now() - t0;
     await sleep(3500); // let late LCP/CLS/long tasks land
+
+    // Optional: grow the board by scrolling, and measure what that costs.
+    // LCP/CLS cannot show this — they are first-paint metrics — so the report
+    // is the delta in the browser's own layout/style/script counters across the
+    // scroll phase, which is exactly what `content-visibility` is supposed to
+    // reduce for the cards that are off screen.
+    let scrollCost = null;
+    if (SCROLL_STEPS > 0) {
+      await page.send('Performance.enable');
+      const readCounters = async () => {
+        const { metrics } = await page.send('Performance.getMetrics');
+        const get = (name) => metrics.find((m) => m.name === name)?.value ?? 0;
+        return {
+          layout: get('LayoutDuration'),
+          style: get('RecalcStyleDuration'),
+          script: get('ScriptDuration'),
+          task: get('TaskDuration'),
+          layoutCount: get('LayoutCount'),
+          nodes: get('Nodes'),
+        };
+      };
+      const before = await readCounters();
+      // Wait until the board actually holds SCROLL_UNTIL cards, rather than for
+      // a fixed time. A fixed wait let the two configurations append different
+      // numbers of rows (106 against 82), which made the counters incomparable —
+      // fewer cards is less work, and it looked like an improvement that was
+      // partly just a smaller DOM.
+      const countCards = async () =>
+        (
+          await page.send('Runtime.evaluate', {
+            returnByValue: true,
+            expression: 'document.querySelectorAll("article").length',
+          })
+        ).result.value;
+      let steps = 0;
+      for (; steps < SCROLL_STEPS; steps++) {
+        if ((await countCards()) >= SCROLL_UNTIL) break;
+        const seen = await countCards();
+        await page.send('Runtime.evaluate', {
+          expression: 'window.scrollTo(0, document.body.scrollHeight)',
+        });
+        // One appended page per step: wait for the count to move, with a cap so a
+        // stalled fetch cannot hang the measurement.
+        const deadline = Date.now() + 3000;
+        while (Date.now() < deadline) {
+          await sleep(150);
+          if ((await countCards()) > seen) break;
+        }
+      }
+      const after = await readCounters();
+      const cards = await countCards();
+      scrollCost = {
+        steps,
+        cards,
+        target: SCROLL_UNTIL,
+        layoutMs: Math.round((after.layout - before.layout) * 1000),
+        styleMs: Math.round((after.style - before.style) * 1000),
+        scriptMs: Math.round((after.script - before.script) * 1000),
+        taskMs: Math.round((after.task - before.task) * 1000),
+        layouts: after.layoutCount - before.layoutCount,
+        nodes: after.nodes - before.nodes,
+      };
+    }
 
     const evaluated = await page.send('Runtime.evaluate', {
       returnByValue: true,
@@ -180,6 +261,7 @@ try {
         resources: performance.getEntriesByType('resource').map(r => ({ name: r.name, type: r.initiatorType, size: r.transferSize || 0, start: Math.round(r.startTime), dur: Math.round(r.duration), renderBlocking: r.renderBlockingStatus })),
         apiCalls: performance.getEntriesByType('resource').filter(r => r.name.includes('/api/')).map(r => r.name),
         cards: document.querySelectorAll('article').length,
+        height: document.documentElement.scrollHeight,
         scripts: [...document.querySelectorAll('script[src]')].map(s => s.getAttribute('src')),
       })`,
     });
@@ -194,6 +276,7 @@ try {
     results.push({
       run,
       loadMs,
+      scrollCost,
       lcp: Math.round(data.perf.lcp),
       lcpElement: data.perf.lcpElement,
       cls: Number(data.perf.cls.toFixed(4)),
@@ -210,6 +293,7 @@ try {
       ),
       apiCalls: data.apiCalls,
       cards: data.cards,
+      height: data.height,
       scripts: data.scripts.length,
     });
 
@@ -246,11 +330,25 @@ const summary = {
     requests: median(results.map((r) => r.requests)),
     bytes: median(results.map((r) => r.bytes)),
     cards: median(results.map((r) => r.cards)),
+    height: median(results.map((r) => r.height)),
   },
   lcpElement: results[0].lcpElement,
   apiCalls: results[0].apiCalls,
   bytesByType: results[0].bytesByType,
   renderBlocking: results[0].renderBlocking,
+  scroll:
+    SCROLL_STEPS > 0
+      ? {
+          steps: SCROLL_STEPS,
+          targetCards: SCROLL_UNTIL,
+          medianLayoutMs: median(results.map((r) => r.scrollCost.layoutMs)),
+          medianStyleMs: median(results.map((r) => r.scrollCost.styleMs)),
+          medianScriptMs: median(results.map((r) => r.scrollCost.scriptMs)),
+          medianTaskMs: median(results.map((r) => r.scrollCost.taskMs)),
+          medianLayouts: median(results.map((r) => r.scrollCost.layouts)),
+          cards: median(results.map((r) => r.scrollCost.cards)),
+        }
+      : null,
   perRun: results,
 };
 console.log(JSON.stringify(summary, null, 2));
