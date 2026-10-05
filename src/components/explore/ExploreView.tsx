@@ -11,6 +11,18 @@ import ExploreCard from './ExploreCard';
 const MASONRY_CLASS =
   'columns-1 gap-3 p-3 [column-fill:balance] md:columns-2 xl:columns-3 2xl:columns-4';
 
+/** How many cards are treated as above the fold: eager, and high fetch
+ *  priority. The rest stay lazy.
+ *
+ *  Kept small on purpose. The board fills column-major, so the visually
+ *  topmost card is not always the first in DOM order and a wide viewport shows
+ *  the tops of three or four columns at once; marking a whole column would
+ *  dilute the hint into what the browser already does for free. Measured
+ *  before this: LCP 3.2s at Slow-4G, with the LCP element being a card image
+ *  that was still `lazy` and queued behind nine siblings. Exported so the test
+ *  that pins the eager/lazy boundary cannot drift from the value. */
+export const ABOVE_THE_FOLD_CARDS = 4;
+
 type ViewMode = 'grid' | 'list';
 
 /** One API page: the hub's head when `cursor` is empty, that page of it
@@ -243,8 +255,8 @@ export default function ExploreView({
       // (items 1..n down column 1); swap in an SSR round-robin split if
       // reading order ever has to be exact.
       <section className={MASONRY_CLASS} aria-label="Explore links">
-        {items.map((article) => (
-          <ExploreCard key={article.id} article={article} />
+        {items.map((article, index) => (
+          <ExploreCard key={article.id} article={article} priority={index < ABOVE_THE_FOLD_CARDS} />
         ))}
       </section>
     );

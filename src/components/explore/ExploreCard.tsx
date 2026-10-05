@@ -27,9 +27,15 @@ function signalAccent(score: number): 'pitch' | 'amber' | 'live' {
 export default function ExploreCard({
   article,
   variant = 'grid',
+  priority = false,
 }: {
   article: ExploreArticle;
   variant?: 'grid' | 'list';
+  /** Above the fold: load eagerly and ask for a high fetch priority. The board
+   *  is a wall of images on a bandwidth-limited link, and with every one of them
+   *  lazy they queue behind each other — measured LCP was 3.2s at Slow-4G with
+   *  the LCP element being a card image that had not started until layout. */
+  priority?: boolean;
 }) {
   const date = publishedDate(article.publishedAt);
   const score = scoreValue(article.qualityScore);
@@ -174,7 +180,8 @@ export default function ExploreCard({
                 alt=""
                 decoding="async"
                 className={`h-full w-full object-cover transition-opacity duration-300${showShimmer ? ' opacity-0' : ' opacity-100'}`}
-                loading="lazy"
+                loading={priority ? 'eager' : 'lazy'}
+                fetchPriority={priority ? 'high' : undefined}
                 onLoad={() => setImgLoaded(true)}
                 onError={(event) => {
                   event.currentTarget.style.display = 'none';

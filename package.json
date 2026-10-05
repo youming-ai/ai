@@ -29,7 +29,9 @@
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
     "format": "biome format --write .",
-    "format:check": "biome format ."
+    "format:check": "biome format .",
+    "perf:seed": "./scripts/prep-local-board.sh",
+    "perf:probe": "node scripts/perf-probe.mjs --url http://127.0.0.1:8787/"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.2.4",
