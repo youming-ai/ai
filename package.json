@@ -7,7 +7,7 @@
   },
   "version": "0.1.0",
   "description": "Curated explore feed template — Cloudflare Workers + D1 + KV + Astro",
-  "repository": "github:youming-ai/umuo",
+  "repository": "github:youming-ai/ai",
   "keywords": [
     "cloudflare",
     "astro",

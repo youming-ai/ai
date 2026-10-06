@@ -2,7 +2,7 @@
 
 > Curated explore feed on Cloudflare Workers. Pull Poche Explore RSS into D1 and render it as a fast Astro masonry board with category hubs and RSS feeds.
 
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/youming-ai/umuo)
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/youming-ai/ai)
 [![Bun](https://img.shields.io/badge/bun-%3E%3D1.4.2-black)](https://bun.sh) [![Astro](https://img.shields.io/badge/Astro-7.x-ff5d01)](https://astro.build) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
 *No ads, no tracking. The bundled config reads Poche Explore RSS; the taxonomy in `src/categories.ts` and source registry in `src/feeds/sources.ts` are yours to replace.*
@@ -30,7 +30,7 @@ Astro 7 + React islands · Cloudflare Workers (workerd) · D1 + KV · Tailwind �
 ## Quick start
 
 ```bash
-git clone https://github.com/youming-ai/umuo my-desk && cd my-desk
+git clone https://github.com/youming-ai/ai my-desk && cd my-desk
 bun install
 
 # One-time Cloudflare setup:
