@@ -165,21 +165,24 @@ describe('design tokens', () => {
     expect(contrast(token(light, dark, 'live'), page), 'live on page').toBeGreaterThanOrEqual(4.5);
   });
 
-  it('keeps the input boundary above 3:1 in both themes', () => {
-    // `.ds-input`'s fill is ~1.1:1 against the page, so its border is the only
-    // cue that a control is there (SC 1.4.11 needs 3:1), which is why it uses
-    // `muted` rather than `line`. Nothing else pins that: the token-sync test
-    // above only compares tokens.json with index.css, so a future retune of
-    // --c-muted could drop the input boundary back under 3:1 silently.
+  it('keeps caption text legible on the surfaces it sits on', () => {
+    // This began as the *input boundary* check, because `--c-muted` was the
+    // border of `.ds-input` and SC 1.4.11 asks 3:1 for a non-text boundary. The
+    // last `<input>` went with the header's search box, so the token's only
+    // remaining job is `text-chalkdim` — 11px caption text on the page and on
+    // the 70%-panel surfaces — which needs 4.5:1. Left at 3:1 under the old name
+    // it would have passed while caption text dropped to the boundary minimum.
+    // Nothing else pins this: the token-sync test above compares tokens.json
+    // with index.css by value, not by legibility.
     for (const [name, theme, other] of [
       ['dark', dark, dark],
       ['light', light, dark],
     ] as const) {
       const page = token(theme, other, 'bg');
-      const border = token(theme, other, 'muted');
+      const text = token(theme, other, 'muted');
       const fill = mix(token(theme, other, 'surface'), page, 0.7);
-      expect(contrast(border, page), `${name}: input border vs page`).toBeGreaterThanOrEqual(3);
-      expect(contrast(border, fill), `${name}: input border vs fill`).toBeGreaterThanOrEqual(3);
+      expect(contrast(text, page), `${name}: caption text on page`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(text, fill), `${name}: caption text on panel`).toBeGreaterThanOrEqual(4.5);
     }
   });
 

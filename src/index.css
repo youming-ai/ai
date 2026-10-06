@@ -48,11 +48,9 @@
   --space-card: 0.75rem;
   --space-card-inner: 0.5rem;
 
-  /* Explore's own toolbar. It replaces the Header on those pages (one sticky
-     bar, not two), and its rail sticks below it — so the height is pinned on
-     lg where the bar is guaranteed one row. Below lg it wraps and the rail is
-     a drawer, so no offset depends on it. */
-  --h-bar: 3rem;
+  /* A `--h-bar` (3rem) pinned the explore toolbar's height while the rail stuck
+     below it. The toolbar is gone — the rail is the page's only chrome, sticky
+     from the top and screen-tall — so nothing has an offset to compute. */
 
   /* Typography — one scale, role-driven. caption/data stays tight;
      body/lead breathe for readability. caption is not decoration: it carries
@@ -167,12 +165,11 @@
   .ds-btn-secondary {
     @apply inline-flex items-center justify-center min-h-11 px-4 py-2 rounded-control border border-line/50 bg-panel/70 text-chalk font-display font-semibold tracking-wide hover:bg-overlay/10 ds-press;
   }
-  .ds-input {
-    /* The fill is only ~1.1:1 against the page, so the border is the field's
-       only boundary and owes SC 1.4.11 its 3:1 — `line` reads 1.44:1 in the
-       light theme, `muted` 5.4:1 (light) and 6.3:1 (dark). */
-    @apply min-h-11 rounded-control border border-chalkdim bg-panel/70 px-3 py-2 font-body text-sm text-chalk outline-none placeholder:text-chalkdim focus:border-pitch focus:ring-1 focus:ring-pitch;
-  }
+  /* No `.ds-input` here: the header's search box was the last <input> in the
+     app, and the class went with it rather than staying as a rule nothing
+     renders (its contrast test went too — it pinned the `chalkdim` boundary for
+     a control that no longer exists). Add both back with the first real form
+     field, along with the SC 1.4.11 check the test carried. */
 
   /* Mono caption — use instead of repeating font-mono text-caption */
   .ds-caption {

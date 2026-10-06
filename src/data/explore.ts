@@ -1,12 +1,24 @@
 import { CATEGORIES } from '../categories';
-import { isVideoMediaUrl, proxiedImageUrl } from '../media';
 import { GLOBAL_FEED_LABEL, SITE_ORIGIN } from '../site';
 import type { ExploreArticle, ExploreFeed, ExploreFilterOption, ExploreFilterSet } from '../types';
-import { num } from '../utils/coerce';
 import { type Env, json, runCached } from './cache';
+import {
+  type CountRow,
+  EXPLORE_ARTICLE_COLUMNS,
+  type ExploreRow,
+  exploreArticle,
+  rowNumber,
+  rowString,
+} from './exploreArticle';
+import { canonicalCursor, exploreCursorFor, parseExploreCursor } from './exploreCursor';
 import { renderExploreRss } from './exploreRss';
 
 // --- Curated Explore feed (D1) ---
+//
+// The query and HTTP layers. Its two pure halves live beside it — the row →
+// article mapping in exploreArticle.ts and the keyset cursor codec in
+// exploreCursor.ts — so this file is I/O only, and neither the cursor nor the
+// mapping needs a D1 stub to be tested.
 
 interface ExploreQuery {
   category?: string;
@@ -27,146 +39,6 @@ const FILTERS_FALLBACK: ExploreFilterSet = {
   // The registry says which hubs exist, never how many rows there are.
   total: null,
 };
-
-interface ExploreRow {
-  id: unknown;
-  title: unknown;
-  description: unknown;
-  ai_summary: unknown;
-  ai_blurb: unknown;
-  canonical_url: unknown;
-  image_url: unknown;
-  image_width: unknown;
-  image_height: unknown;
-  published_at: unknown;
-  day_bucket: unknown;
-  category: unknown;
-  quality_score: unknown;
-  freshness_score: unknown;
-  tags?: unknown;
-}
-
-export interface CountRow {
-  value: unknown;
-  count: unknown;
-}
-
-export const rowString = (v: unknown): string => (typeof v === 'string' ? v : '');
-export const rowNumber = num;
-
-function sourceDomain(value: unknown): string {
-  try {
-    return new URL(rowString(value)).hostname.replace(/^www\./, '');
-  } catch {
-    return '';
-  }
-}
-
-function rowTags(value: unknown): string[] {
-  if (Array.isArray(value)) return value.filter((tag): tag is string => typeof tag === 'string');
-  if (typeof value !== 'string') return [];
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed)
-      ? parsed.filter((tag): tag is string => typeof tag === 'string')
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function exploreArticle(row: ExploreRow): ExploreArticle {
-  // The video judgement reads the URL as the feed delivered it — before the
-  // /media rewrite, which can strip the extension the check depends on.
-  const rawImageUrl = rowString(row.image_url);
-  return {
-    id: rowString(row.id),
-    title: rowString(row.title),
-    description: rowString(row.description),
-    summary: rowString(row.ai_summary),
-    blurb: rowString(row.ai_blurb),
-    url: rowString(row.canonical_url),
-    // Upstream-hosted images are rewritten to /media so the feed's own CDN
-    // origin never reaches markup, the payload, or og:image.
-    imageUrl: proxiedImageUrl(rawImageUrl),
-    isVideo: isVideoMediaUrl(rawImageUrl),
-    imageWidth: rowNumber(row.image_width),
-    imageHeight: rowNumber(row.image_height),
-    // Story domain, not feed URL — feeds.bbci.co.uk → bbc.com.
-    sourceDomain: sourceDomain(row.canonical_url),
-    publishedAt: rowNumber(row.published_at),
-    category: rowString(row.category) || null,
-    freshnessScore: rowNumber(row.freshness_score),
-    tags: rowTags(row.tags),
-    qualityScore: rowNumber(row.quality_score),
-  };
-}
-
-/** Keyset cursor `<day>:<quality>:<published_at>:<id>`. The feed sorts by
- *  recency at day granularity first (newest day wins — an explore feed must not
- *  pin a 75-day-old link above today's), then editorial quality within the
- *  day, then exact time, then id. Every key is immutable (the day bucket is
- *  floor(published_at / 86400000), not a now-relative window), so the keyset
- *  stays stable under the daily ingest inserts. Offset would slide under rows
- *  inserted at the top every ingest tick. */
-
-/** Live freshness, computed at query time from published_at rather than the
- *  frozen insert-time snapshot the column used to hold. 259200 = 72h in
- *  seconds. Exported to API consumers; the current UI renders no freshness
- *  value, so this is a documented surface rather than a rendered one. */
-const LIVE_FRESHNESS =
-  "MAX(0, MIN(100, ROUND(100.0 - (CAST(strftime('%s','now') AS REAL) - a.published_at / 1000.0) / 259200.0 * 100.0))) AS freshness_score";
-
-/** Single source of truth for the article SELECT projection.
- *
- *  `article_type` is deliberately absent: the pipeline writes `'link'` for every
- *  row, so it was a constant that cost a column read on every query and a slot
- *  in every cached payload (and was rendered on every card as `LINK / X`). */
-const EXPLORE_ARTICLE_COLUMNS =
-  'a.id, a.title, a.description, a.ai_summary, a.ai_blurb, a.canonical_url, ' +
-  'a.image_url, a.image_width, a.image_height, ' +
-  'a.published_at, a.day_bucket, a.category, a.quality_score, ' +
-  `${LIVE_FRESHNESS}, ` +
-  "COALESCE((SELECT json_group_array(at.tag) FROM article_tags at WHERE at.article_id = a.id), '[]') AS tags";
-export function parseExploreCursor(
-  value: string | undefined,
-): [number, number, number, string] | null {
-  if (!value) return null;
-  const first = value.indexOf(':');
-  if (first <= 0) return null;
-  const second = value.indexOf(':', first + 1);
-  if (second <= first + 1) return null;
-  const third = value.indexOf(':', second + 1);
-  if (third <= second + 1) return null;
-  const day = Number(value.slice(0, first));
-  const qualityScore = Number(value.slice(first + 1, second));
-  const publishedAt = Number(value.slice(second + 1, third));
-  const id = value.slice(third + 1);
-  if (
-    !Number.isFinite(day) ||
-    !Number.isFinite(qualityScore) ||
-    !Number.isFinite(publishedAt) ||
-    !id
-  )
-    return null;
-  // Only the field that cannot be negative is rejected. day_bucket and
-  // published_at legitimately are for a pre-1970 pubDate, which the feed parser
-  // stores as-is and migration 0015 buckets by floor — rejecting those would
-  // have made such a row listable but its page unreachable, since every
-  // subsequent cursor would collapse to page one. quality_score is a 0-100
-  // authority score, so a negative one cannot come from any row.
-  if (qualityScore < 0) return null;
-  return [day, qualityScore, publishedAt, id];
-}
-
-function exploreCursorFor(row: ExploreRow): string {
-  return `${rowNumber(row.day_bucket)}:${rowNumber(row.quality_score)}:${rowNumber(row.published_at)}:${rowString(row.id)}`;
-}
-
-function canonicalCursor(value: string | undefined): string | undefined {
-  const parsed = parseExploreCursor(value?.slice(0, 160));
-  return parsed ? `${parsed[0]}:${parsed[1]}:${parsed[2]}:${parsed[3]}` : undefined;
-}
 
 function normalizedExploreQuery(
   query: ExploreQuery,

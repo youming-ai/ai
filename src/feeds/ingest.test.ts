@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../data/api';
 import { SITE_NAME, SITE_ORIGIN } from '../site';
+import { sleep } from '../utils/coerce';
 import { canonicalizeUrl, ingestAllSources, knownCanonicalUrls, knownFingerprints } from './ingest';
 
 // File-scoped, not inside a describe. Two blocks here stub `fetch`, and a hook
@@ -9,6 +10,77 @@ import { canonicalizeUrl, ingestAllSources, knownCanonicalUrls, knownFingerprint
 afterEach(() => {
   vi.unstubAllGlobals();
 });
+
+// fetchWithRetry sleeps 500ms then 1000ms between attempts. Real timers would
+// add 1.5s to every retry case in a suite that runs serially, so the sleep is
+// stubbed: what these tests pin is when a retry happens, not how long it waits.
+// The rest of the module is the real thing — rss.ts imports decodeEntities from
+// here, and a wholesale mock would hand it undefined.
+vi.mock('../utils/coerce', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../utils/coerce')>()),
+  sleep: vi.fn(async () => {}),
+}));
+
+/** One distilled article, so a test's feed is a template string away. */
+const ONE_ITEM = `<?xml version="1.0" encoding="UTF-8"?>
+  <rss version="2.0"><channel>
+    <item><title>Story</title><link>https://example.com/story</link>
+      <description>x</description></item>
+  </channel></rss>`;
+
+function feedOf(...items: string[]): string {
+  return `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel>${items.join(
+    '',
+  )}</channel></rss>`;
+}
+
+function item(title: string, link: string, description = 'x'): string {
+  return `<item><title>${title}</title><link>${link}</link><description>${description}</description></item>`;
+}
+
+/** The D1 surface ingestAllSources actually uses: the source upsert, the two
+ *  dedupe lookups, and the article insert. `inserted` records the bindings of
+ *  every article INSERT so a test can assert on what reached the database
+ *  rather than on what the report claims. */
+function ingestDb(
+  { changes = 1, enabled = ['poche-explore'] }: { changes?: number; enabled?: string[] } = {},
+  stored: { fingerprints?: string[]; urls?: string[] } = {},
+) {
+  const inserted: unknown[][] = [];
+  const db = {
+    batch: vi.fn(async () => []),
+    prepare: vi.fn((sql: string) => {
+      if (sql.includes('SELECT id FROM sources')) {
+        return { all: async () => ({ results: enabled.map((id) => ({ id })) }) };
+      }
+      if (sql.includes('FROM articles') && sql.includes(' IN (')) {
+        return {
+          bind: vi.fn((...params: string[]) => ({
+            all: async () => ({
+              results: params
+                .filter((p) => stored.fingerprints?.includes(p) || stored.urls?.includes(p))
+                .map((value) => ({ fingerprint: value, canonical_url: value })),
+            }),
+          })),
+        };
+      }
+      return {
+        bind: vi.fn((...params: unknown[]) => {
+          if (sql.includes('INSERT INTO articles')) inserted.push(params);
+          return {
+            all: async () => ({ results: [] }),
+            run: async () => ({ meta: { changes } }),
+          };
+        }),
+      };
+    }),
+  };
+  return { db: db as unknown as D1Database, inserted };
+}
+
+function envWith(db: D1Database): Env {
+  return { DB: db } as unknown as Env;
+}
 
 describe('canonicalizeUrl', () => {
   it('removes tracking parameters while preserving editorial query parameters', () => {
@@ -123,28 +195,151 @@ describe('ingestAllSources', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(rssXml, { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const fakeDb = {
-      batch: vi.fn(async () => []),
-      prepare: vi.fn((sql: string) => {
-        if (sql.includes('SELECT id FROM sources')) {
-          return { all: async () => ({ results: [{ id: 'poche-explore' }] }) };
-        }
-        return {
-          bind: vi.fn((..._params: unknown[]) => ({
-            all: async () => ({ results: [] }),
-            run: async () => ({ meta: { changes: 1 } }),
-          })),
-        };
-      }),
-    } as unknown as D1Database;
-
-    const env = { DB: fakeDb } as unknown as Env;
-    const report = await ingestAllSources(env);
+    const report = await ingestAllSources(envWith(ingestDb().db));
 
     expect(report.sources).toBe(1);
     expect(report.stored).toBe(3);
     expect(report.uncategorized).toBe(2);
     expect(report.failed).toHaveLength(0);
+  });
+
+  it('drops a second entry for a URL the same feed already gave', async () => {
+    // The same story listed twice under different titles: the titles differ, so
+    // the fingerprint differs with them and only the in-batch view of seen URLs
+    // catches it. Without that set this tick would insert two rows.
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            feedOf(
+              item('Story one', 'https://example.com/story'),
+              item('Story one, again', 'https://example.com/story'),
+            ),
+            { status: 200 },
+          ),
+        ),
+    );
+
+    const { db, inserted } = ingestDb();
+    const report = await ingestAllSources(envWith(db));
+
+    expect(report.fetched).toBe(1);
+    expect(report.stored).toBe(1);
+    expect(inserted).toHaveLength(1);
+  });
+
+  it('never stores a link whose scheme is not http(s)', async () => {
+    // Pinned as an outcome, not as one guard: two defences drop this item — the
+    // canonicalize step returns '' and, were that removed, fingerprinting throws
+    // on `new URL('')` and the item is skipped anyway. Both are observable only
+    // as "it was not stored", so this catches the regression that removes both
+    // (a dead `javascript:` link reaching the board) rather than either alone.
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            feedOf(item('Script', 'javascript:alert(1)'), item('Real', 'https://example.com/real')),
+            { status: 200 },
+          ),
+        ),
+    );
+
+    const { db, inserted } = ingestDb();
+    const report = await ingestAllSources(envWith(db));
+
+    expect(report.fetched).toBe(1);
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0]?.[2]).toBe('https://example.com/real');
+  });
+});
+
+describe('the fetch retry policy', () => {
+  // AGENTS.md names the 429/5xx retry as a gotcha, and every other case in this
+  // file stubs a 200 — so the whole retry path was unverified. Deleting the
+  // retry, inverting the status test, or dropping the deadline shipped green.
+
+  it('retries a 5xx and stores the articles from the attempt that worked', async () => {
+    const slept = vi.mocked(sleep);
+    slept.mockClear();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('down', { status: 500 }))
+      .mockResolvedValueOnce(new Response('still down', { status: 502 }))
+      .mockResolvedValueOnce(new Response(ONE_ITEM, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const report = await ingestAllSources(envWith(ingestDb().db));
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(report.failed).toEqual([]);
+    expect(report.stored).toBe(1);
+    // Backoff between attempts, and none after the successful one. Stubbed
+    // above, so this costs nothing and pins the intervals a removal would drop.
+    expect(slept.mock.calls).toEqual([[500], [1000]]);
+  });
+
+  it('retries 429 — a rate limit is transient, not an answer', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('slow down', { status: 429 }))
+      .mockResolvedValueOnce(new Response(ONE_ITEM, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const report = await ingestAllSources(envWith(ingestDb().db));
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(report.failed).toEqual([]);
+    expect(report.stored).toBe(1);
+  });
+
+  it('does not retry a 4xx — the feed is gone, not busy', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('gone', { status: 404 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const report = await ingestAllSources(envWith(ingestDb().db));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(report.failed).toEqual(['poche-explore']);
+    expect(report.fetched).toBe(0);
+  });
+
+  it('gives up after three attempts and reports the source as failed', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('down', { status: 503 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const report = await ingestAllSources(envWith(ingestDb().db));
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(report.failed).toEqual(['poche-explore']);
+    expect(report.fetched).toBe(0);
+  });
+
+  it('retries a network throw, then lets the third one fail the source', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('socket hang up'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const report = await ingestAllSources(envWith(ingestDb().db));
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(report.failed).toEqual(['poche-explore']);
+  });
+
+  it('bounds every attempt with the same deadline', async () => {
+    // Without a signal a hanging upstream holds the tick until the platform
+    // gives up, and the site silently stops updating. Pinned to the value so a
+    // changed ceiling has to be a deliberate edit here too.
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    const fetchMock = vi.fn().mockResolvedValue(new Response(ONE_ITEM, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await ingestAllSources(envWith(ingestDb().db));
+
+    expect(timeout).toHaveBeenCalledWith(10_000);
+    expect(fetchMock.mock.calls[0]?.[1]).toHaveProperty('signal');
   });
 });
 
@@ -153,27 +348,10 @@ describe('the upstream request identifies this site', () => {
   // name beside this deployment's domain, with the origin typed in a second
   // place; both now derive from src/site.ts, and this pins the result.
   it('sends a user-agent naming the site and its real origin', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(new Response('<rss><channel></channel></rss>', { status: 200 }));
+    const fetchMock = vi.fn().mockResolvedValue(new Response(feedOf(), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const fakeDb = {
-      batch: vi.fn(async () => []),
-      prepare: vi.fn((sql: string) => {
-        if (sql.includes('SELECT id FROM sources')) {
-          return { all: async () => ({ results: [{ id: 'poche-explore' }] }) };
-        }
-        return {
-          bind: vi.fn(() => ({
-            all: async () => ({ results: [] }),
-            run: async () => ({ meta: { changes: 0 } }),
-          })),
-        };
-      }),
-    } as unknown as D1Database;
-
-    await ingestAllSources({ DB: fakeDb } as unknown as Env);
+    await ingestAllSources(envWith(ingestDb({ changes: 0 }).db));
 
     expect(fetchMock).toHaveBeenCalled();
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
@@ -189,35 +367,27 @@ describe('the report does not overstate what it stored', () => {
     // storeArticle is ON CONFLICT DO NOTHING: a conflict the pre-filters cannot
     // see (another tick racing the same story) inserts nothing, and counting it
     // as stored made every such tick report work it had not done.
-    const rssXml = `<?xml version="1.0"?>
-      <rss version="2.0"><channel>
-        <item><title>Race</title><link>https://example.com/race</link>
-          <description>x</description></item>
-      </channel></rss>`;
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(rssXml, { status: 200 })));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(ONE_ITEM, { status: 200 })));
 
-    const run = vi.fn(async () => ({ meta: { changes: 0 } }));
-    const fakeDb = {
-      batch: vi.fn(async () => []),
-      prepare: vi.fn((sql: string) => {
-        if (sql.includes('SELECT id FROM sources')) {
-          return { all: async () => ({ results: [{ id: 'poche-explore' }] }) };
-        }
-        return {
-          bind: vi.fn(() => ({
-            all: async () => ({ results: [] }),
-            // The row already exists, so the insert changes nothing.
-            run,
-          })),
-        };
-      }),
-    } as unknown as D1Database;
+    const { db, inserted } = ingestDb({ changes: 0 });
+    const report = await ingestAllSources(envWith(db));
 
-    const report = await ingestAllSources({ DB: fakeDb } as unknown as Env);
     expect(report.fetched).toBe(1);
     // Without this the test would pass on a path that never inserted at all.
-    expect(run).toHaveBeenCalledTimes(1);
+    expect(inserted).toHaveLength(1);
     expect(report.stored).toBe(0);
     expect(report.skipped).toBe(1);
+  });
+});
+
+describe('sources that are disabled', () => {
+  it('fetches nothing when no source is enabled, without calling upstream', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const report = await ingestAllSources(envWith(ingestDb({ enabled: [] }).db));
+
+    expect(report.sources).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,4 @@
-# News Desk Template
+# umuo
 
 > Curated explore feed on Cloudflare Workers. Pull Poche Explore RSS into D1 and render it as a fast Astro masonry board with category hubs and RSS feeds.
 
@@ -16,6 +16,7 @@
 - **KV SWR cache** — `runCached` with stale-while-revalidate, request coalescing, bounded keys (cursor pages bypass KV)
 - **Masonry board** — native CSS multi-column, infinite scroll, per-category `/[category]` hubs
 - **SEO ready** — `/rss.xml`, `/[category]/rss.xml`, `/sitemap.xml`, canonical/og tags, JSON-LD
+- **Ops** — `/api/health` reports the deployed version and probes D1 and the cache binding, answering `503` when either is unreachable
 
 ## Tech stack
 
@@ -88,6 +89,9 @@ graph TD
 | `/sitemap.xml` | Sitemap — category hubs and feeds |
 | `/media/<uuid>` | Feed-CDN images, re-served under this origin. Unrecognised but validly encoded `/media/…` paths fall through to the app; malformed percent-encoding is answered `400` |
 | `/a/:id` | Legacy per-link URL, 301s to the article's source |
+| `/api/explore` | JSON feed for the board's infinite scroll. `category`, `cursor`, `limit`; cursor pages bypass KV |
+| `/api/explore/filters` | The rail's counts. Global — `?category` is ignored |
+| `/api/health` | Liveness, deployed version, and D1/cache reachability. `503` when degraded |
 
 ## Deployment
 
