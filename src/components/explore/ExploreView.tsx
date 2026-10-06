@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CATEGORIES, CATEGORY_GROUPS } from '../../categories';
 import { GLOBAL_FEED_LABEL } from '../../site';
 import type { ExploreFeed, ExploreFilterOption, ExploreFilterSet } from '../../types';
@@ -127,10 +127,17 @@ export default function ExploreView({
 }) {
   // One axis of client-side state, because only one can vary without a document
   // load: the rail renders <a href> links, so switching hub remounts this island
-  // with a fresh SSR payload. `cursor` is therefore the only thing that changes
+  // with a fresh SSR payload. `cursor` is therefore the only value that changes
   // here, and '' doubles as "the SSR'd first page is what is on screen" — which
   // is what lets the fetch effect below skip its mount run.
+  //
+  // `attempt` exists because the cursor alone cannot express *ask again for the
+  // page you just failed to load*: after a failure the cursor already equals the
+  // one in flight, React bails on an identical state update, and the effect never
+  // re-runs — leaving "Load more" enabled and inert until a reload. The token is
+  // what makes a repeat request a new one.
   const [cursor, setCursor] = useState('');
+  const [attempt, setAttempt] = useState(0);
   const [items, setItems] = useState(initialData.items);
   const [nextCursor, setNextCursor] = useState(initialData.nextCursor);
   const [loading, setLoading] = useState(false);
@@ -140,6 +147,14 @@ export default function ExploreView({
 
   // Category pages carry a scope label for the mobile disclosure.
   const scopeLabel = initialCategory ? (CATEGORIES[initialCategory]?.label ?? initialCategory) : '';
+
+  /** Request the page the API last handed us. Used by both the button and the
+   *  sentinel, and re-usable for the page already requested: the token bump is
+   *  what turns a repeat into a request. */
+  const requestNextPage = useCallback((next: string) => {
+    setCursor(next);
+    setAttempt((count) => count + 1);
+  }, []);
 
   useEffect(() => {
     // '' is the page SSR already rendered, so the first fetch is the first
@@ -167,7 +182,7 @@ export default function ExploreView({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [cursor, initialCategory]);
+  }, [cursor, attempt, initialCategory]);
 
   // Infinite scroll: re-running on [nextCursor, loading] is what makes it
   // repeat. Appending rows fires no new intersection event, so the observer is
@@ -178,13 +193,13 @@ export default function ExploreView({
     const next = nextCursor;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) setCursor(next);
+        if (entries.some((entry) => entry.isIntersecting)) requestNextPage(next);
       },
       { rootMargin: '600px' },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [loading, nextCursor]);
+  }, [loading, nextCursor, requestNextPage]);
 
   // An outage is either what SSR was handed ("unavailable") or what a client
   // fetch reported (its message set in `error`) — neither is an empty corpus.
@@ -317,7 +332,7 @@ export default function ExploreView({
             {nextCursor !== null ? (
               <button
                 type="button"
-                onClick={() => setCursor(nextCursor)}
+                onClick={() => requestNextPage(nextCursor)}
                 disabled={loading}
                 className="ds-btn-secondary"
               >

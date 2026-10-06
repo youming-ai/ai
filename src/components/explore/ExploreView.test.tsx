@@ -131,6 +131,28 @@ describe('ExploreView pagination', () => {
     expect(url).toContain('cursor=cur-1');
   });
 
+  it('retries the same page when the reader asks again after a failure', async () => {
+    // Regression: the button used to set the cursor to the value it already
+    // held, and React bails on an identical state update — so the effect never
+    // re-ran and a transient failure left "Load more" looking live but inert
+    // until a reload. The scroll path had the same hole.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('nope', { status: 502 }))
+      .mockResolvedValueOnce(ok(feed([card('b', 'second story')], null)));
+    vi.stubGlobal('fetch', fetchMock);
+
+    mount();
+    const button = screen.getByRole('button', { name: /load more stories/i });
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /load more stories/i }));
+
+    await waitFor(() => expect(screen.getByText('second story')).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps the page and reports the failure when an append fails', async () => {
     // A failed page must not empty the board or be reported as an exhausted
     // feed: the reader keeps what they had and is told what happened.

@@ -1,7 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-// The module under test, not the facade: reachable via src/data/api.ts too, but
-// importing the seam directly is what makes the split worth having.
+// The module under test, imported directly rather than through the src/data/api
+// facade — which does not re-export the codec at all: the facade deliberately
+// exposes `explore.ts` and `sitemapData.ts` and leaves these two pure halves
+// internal, so importing the seam is the only way in as well as the point of it.
 import { parseExploreCursor } from './exploreCursor';
 
 describe('parseExploreCursor', () => {

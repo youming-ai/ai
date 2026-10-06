@@ -1,7 +1,9 @@
 # Example: copy to wrangler.toml and fill ids
 # See README.md Quick start
-# Static SPA + a Worker that edge-caches the upstream data APIs in KV.
-name = "news-desk-template"
+# Astro SSR on Workers: a D1-backed explore feed with a KV SWR cache in front of
+# it. The cron pulls the curated Poche Explore RSS into D1; `/media/*` is relayed
+# by the entrypoint before Astro sees the request.
+name = "umuo"
 compatibility_date = "2026-07-17"
 compatibility_flags = ["nodejs_compat"]
 main = "./worker/entrypoint.ts"
@@ -31,7 +33,7 @@ id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"  # TODO: wrangler kv namespace create CA
 
 [[d1_databases]]
 binding = "DB"
-database_name = "news-desk-content"
+database_name = "umuo-content"
 # Required for remote deploys — database_name alone does not resolve.
 # Primary region is APAC; D1 cannot be moved without recreating it.
 database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"  # TODO: wrangler d1 create news-desk-content
