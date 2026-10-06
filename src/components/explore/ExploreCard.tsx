@@ -1,6 +1,6 @@
 import { categoryLabel } from '../../categories';
 import { transformedFeedImage } from '../../images';
-import { withTemporalFragment } from '../../media';
+import { sameOriginAsset, withTemporalFragment } from '../../media';
 import { articleDeck } from '../../site';
 import type { ExploreArticle } from '../../types';
 
@@ -56,8 +56,11 @@ export default function ExploreCard({
   // work (see src/images.ts for the measurements). The original is carried
   // alongside whenever the two differ, because a rule that rots answers 404/400
   // rather than degrading — `src/scripts/board.ts` retries it once.
-  const imageSrc = transformedFeedImage(article.imageUrl);
-  const imageFallback = imageSrc === article.imageUrl ? undefined : article.imageUrl;
+  // Root-relative for our own media route (see sameOriginAsset): an <img> pinned
+  // to the canonical origin breaks on any other host serving this app.
+  const imageUrl = sameOriginAsset(article.imageUrl);
+  const imageSrc = transformedFeedImage(imageUrl);
+  const imageFallback = imageSrc === imageUrl ? undefined : imageUrl;
 
   // Engage the shimmer only when the image is genuinely still loading — cached
   // / already-complete images stay visible and never flash. Server-rendered with
@@ -123,7 +126,7 @@ export default function ExploreCard({
       </div>
 
       <a href={article.url} target="_blank" rel="noopener noreferrer" className="group block">
-        {article.imageUrl && (
+        {imageUrl && (
           // Reserve aspect-ratio so the column doesn't shift when the image
           // loads. Natural ratio when the feed gave width+height, else 16:9.
           // object-cover crops to fill; ragged card heights still come from
@@ -153,7 +156,7 @@ export default function ExploreCard({
               <video
                 data-preview
                 data-card-media
-                src={withTemporalFragment(article.imageUrl)}
+                src={withTemporalFragment(imageUrl)}
                 muted
                 loop
                 playsInline

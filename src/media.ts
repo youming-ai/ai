@@ -86,6 +86,22 @@ export function proxiedImageUrl(url: string): string {
   return isUpstreamHost(url) ? '' : url;
 }
 
+/** The same-origin path for a URL that points at our own media route, or the URL
+ *  unchanged when it does not.
+ *
+ *  Asset URLs must not carry the canonical origin. `SITE_ORIGIN` answers "where
+ *  should this site live" for canonical/og:image/sitemap/RSS; the page may be
+ *  served from somewhere else — a custom domain, a preview URL, a second
+ *  hostname on the same Worker — and an `<img>` pinned to the canonical host
+ *  breaks wherever the two differ. Not hypothetical: this shipped with
+ *  `SITE_ORIGIN` still on a domain that has no DNS record, so every proxied card
+ *  image 404'd on the live site while the identical path on the serving host
+ *  answered 200. A root-relative path is served by whoever served the page. */
+export function sameOriginAsset(url: string): string {
+  const prefix = `${SITE_ORIGIN}${MEDIA_PATH}`;
+  return url.startsWith(prefix) ? url.slice(SITE_ORIGIN.length) : url;
+}
+
 /** Handle a request for `/media/<file>`, or return null when the path is not
  *  ours so the caller can continue to its normal routing.
  *
