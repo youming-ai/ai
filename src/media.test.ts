@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   MEDIA_PATH,
+  sameOriginAsset,
   isVideoMediaUrl,
   mediaFile,
   mediaRequest,
@@ -92,6 +93,38 @@ describe('mediaFile', () => {
   it('returns null for values that are not absolute URLs', () => {
     expect(mediaFile(`${MEDIA_PATH}${ID}`)).toBeNull();
     expect(mediaFile('')).toBeNull();
+  });
+});
+
+describe('sameOriginAsset', () => {
+  // The bug this exists for: card images were rewritten to
+  // `${SITE_ORIGIN}/media/<id>`, and SITE_ORIGIN pointed at a domain with no DNS
+  // record — so every proxied image on the live site was broken while the same
+  // path on the serving host answered 200. An asset URL belongs to whoever
+  // served the page.
+  it('turns our own media URL into a root-relative path', () => {
+    expect(sameOriginAsset(`${SITE_ORIGIN}/media/437e368b-c40c-4e02-8e06-2ca5bbcb8055`)).toBe(
+      '/media/437e368b-c40c-4e02-8e06-2ca5bbcb8055',
+    );
+  });
+
+  it('leaves a third-party image alone, absolute', () => {
+    for (const url of [
+      'https://images.ctfassets.net/a/b/photo.png',
+      'https://pbs.twimg.com/media/abc.jpg?format=webp&name=small',
+      'https://example.com/photo.png',
+      '',
+    ]) {
+      expect(sameOriginAsset(url), url).toBe(url);
+    }
+  });
+
+  it('does not touch another path on our own origin', () => {
+    // Only the media route is ours to re-point; a canonical or og URL must keep
+    // the canonical origin.
+    for (const url of [`${SITE_ORIGIN}/og.png`, `${SITE_ORIGIN}/`, `${SITE_ORIGIN}/tools`]) {
+      expect(sameOriginAsset(url), url).toBe(url);
+    }
   });
 });
 

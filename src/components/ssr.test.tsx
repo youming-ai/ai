@@ -5,6 +5,7 @@
 // environment on purpose: `document` is undefined here, exactly like workerd.
 import { renderToString } from 'react-dom/server';
 import { expect, it } from 'vitest';
+import { SITE_ORIGIN } from '../site';
 import { CATEGORIES } from '../categories';
 import ExploreView, { ABOVE_THE_FOLD_CARDS } from './explore/ExploreView';
 
@@ -219,6 +220,50 @@ it('renders rail rows tall enough to tap', () => {
   const link = html.match(/<a[^>]*href="\/tools"[^>]*>/)?.[0] ?? '';
   expect(link, 'tools filter link rendered').not.toBe('');
   expect(link).toContain('min-h-7');
+});
+
+it('serves our own media route as a root-relative path', () => {
+  // The bug this pins: card images were rendered as
+  // `https://<canonical-origin>/media/<id>`, and on the deployed host the
+  // canonical origin had no DNS record at all — so every proxied image was
+  // broken while the same path on the serving host answered 200. Third-party
+  // images keep their absolute URL, because we do not own those.
+  const feedImage = (id: string, imageUrl: string) => ({
+    id,
+    title: `Story ${id}`,
+    description: '',
+    summary: '',
+    blurb: '',
+    url: `https://example.com/${id}`,
+    imageUrl,
+    isVideo: false,
+    imageWidth: 0,
+    imageHeight: 0,
+    sourceDomain: 'example.com',
+    publishedAt: 1786080856000,
+    category: 'tools',
+    tags: ['tools'],
+    qualityScore: 82,
+    freshnessScore: 60,
+  });
+
+  const html = renderToString(
+    <ExploreView
+      initialData={{
+        items: [
+          feedImage('a', `${SITE_ORIGIN}/media/437e368b-c40c-4e02-8e06-2ca5bbcb8055`),
+          feedImage('b', 'https://images.ctfassets.net/a/b/photo.png'),
+        ],
+        nextCursor: null,
+      }}
+      initialFilters={{ categories: [] }}
+    />,
+  );
+
+  expect(html).toContain('src="/media/437e368b-c40c-4e02-8e06-2ca5bbcb8055"');
+  expect(html).not.toContain(`src="${SITE_ORIGIN}/media/`);
+  // And the third-party one is still absolute — that is not ours to re-point.
+  expect(html).toContain('src="https://images.ctfassets.net/a/b/photo.png?');
 });
 
 it('asks the publisher CDN for a card-sized image, keeping the original as a fallback', () => {
