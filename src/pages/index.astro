@@ -10,6 +10,9 @@ const [initialData, initialFilters] = await Promise.all([
   getExploreFeed({}, env, ctx),
   getExploreFilters(env, ctx),
 ]);
+// The layout toggle is a link, so the choice lives in the URL — one source of
+// truth for the server-rendered board and the appended pages alike.
+const initialView = Astro.url.searchParams.get('view') === 'list' ? 'list' : 'grid';
 const websiteJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
@@ -29,10 +32,9 @@ const websiteJsonLd = {
   </a>
   <main>
     <h1 class="sr-only">{SITE_TITLE}</h1>
-    <ExploreView
-      initialData={initialData}
-      initialFilters={initialFilters}
-      client:load
-    />
+    <ExploreView initialData={initialData} initialFilters={initialFilters} initialView={initialView} />
   </main>
+  <script>
+    import '../scripts/board';
+  </script>
 </Layout>

@@ -20,7 +20,7 @@
   "packageManager": "bun@1.4.2",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro check && tsc -p tsconfig.worker.json && astro build",
+    "build": "astro check && tsc -p tsconfig.worker.json && astro build && node scripts/perf-budget.mjs",
     "deploy": "bunx wrangler d1 migrations apply DB --remote && bunx wrangler deploy",
     "db:migrate": "bunx wrangler d1 migrations apply DB --remote",
     "typecheck": "astro check && tsc -p tsconfig.worker.json",
@@ -29,7 +29,12 @@
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
     "format": "biome format --write .",
-    "format:check": "biome format ."
+    "format:check": "biome format .",
+    "perf:seed": "./scripts/prep-local-board.sh",
+    "perf:budget": "node scripts/perf-budget.mjs",
+    "perf:images": "bun scripts/perf-image-audit.ts",
+    "perf:transforms": "bun scripts/perf-image-transform-probe.ts",
+    "perf:probe": "node scripts/perf-probe.mjs --url http://127.0.0.1:8787/"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.2.4",

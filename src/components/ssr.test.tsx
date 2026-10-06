@@ -6,7 +6,7 @@
 import { renderToString } from 'react-dom/server';
 import { expect, it } from 'vitest';
 import { CATEGORIES } from '../categories';
-import ExploreView from './explore/ExploreView';
+import ExploreView, { ABOVE_THE_FOLD_CARDS } from './explore/ExploreView';
 
 it('renders the Explore shell server-side without touching browser globals', () => {
   const html = renderToString(
@@ -221,6 +221,46 @@ it('renders rail rows tall enough to tap', () => {
   expect(link).toContain('min-h-7');
 });
 
+it('asks the publisher CDN for a card-sized image, keeping the original as a fallback', () => {
+  // Through the real renderer, so the transform is pinned where it is applied
+  // rather than only in src/images.ts. The fallback attribute is what
+  // src/scripts/board.ts retries with.
+  const html = renderToString(
+    <ExploreView
+      initialData={{
+        items: [
+          {
+            id: '1',
+            title: 'Story',
+            description: '',
+            summary: '',
+            blurb: '',
+            url: 'https://example.com/story',
+            // A host whose convention was measured (1241 KB -> 58 KB).
+            imageUrl: 'https://images.ctfassets.net/a/b/photo.png',
+            isVideo: false,
+            imageWidth: 0,
+            imageHeight: 0,
+            sourceDomain: 'example.com',
+            publishedAt: 1786080856000,
+            category: 'tools',
+            tags: ['tools'],
+            qualityScore: 82,
+            freshnessScore: 60,
+          },
+        ],
+        nextCursor: null,
+      }}
+      initialFilters={{ categories: [] }}
+    />,
+  );
+
+  expect(html).toContain(
+    'src="https://images.ctfassets.net/a/b/photo.png?w=900&amp;fm=webp&amp;q=75"',
+  );
+  expect(html).toContain('data-original-src="https://images.ctfassets.net/a/b/photo.png"');
+});
+
 it('renders the layout and theme controls with the rail, not in a toolbar', () => {
   // The toolbar was removed: the rail is the only chrome, and the controls sit
   // at its foot so they exist in both places it renders — the desktop column
@@ -246,4 +286,57 @@ it('renders the layout and theme controls with the rail, not in a toolbar', () =
   expect(themes[1]).toBeGreaterThan(railRows[1]!);
   // The removed bar was the only backdrop-blurred surface in the markup.
   expect(html).not.toContain('backdrop-blur');
+});
+
+it('loads only the first cards eagerly, at high priority', () => {
+  // The board is a wall of images on a bandwidth-limited link. Measured at
+  // Slow-4G, the LCP element was a card image that was still `loading="lazy"`
+  // and queued behind nine siblings, for LCP 3.2s. Above-the-fold cards load
+  // eagerly at high priority; everything below stays lazy so the first screen
+  // is not competing with twenty images nobody has scrolled to yet.
+  const items = Array.from({ length: 6 }, (_, index) => ({
+    id: `c${index}`,
+    title: `Story ${index}`,
+    description: '',
+    summary: '',
+    blurb: '',
+    url: `https://example.com/${index}`,
+    imageUrl: `/img-${index}.png`,
+    isVideo: false,
+    imageWidth: 1200,
+    imageHeight: 630,
+    sourceDomain: 'example.com',
+    publishedAt: 1786080856000,
+    category: 'tools',
+    tags: ['tools'],
+    qualityScore: 82,
+    freshnessScore: 60,
+  }));
+
+  const html = renderToString(
+    <ExploreView initialData={{ items, nextCursor: null }} initialFilters={{ categories: [] }} />,
+  );
+
+  const eager = html.match(/loading="eager"/g) ?? [];
+  const lazy = html.match(/loading="lazy"/g) ?? [];
+  // Lowercase, and exact: React 18 warns on the camelCase `fetchPriority` prop
+  // (React 19 accepts it), so the attribute is spread in lowercase — which this
+  // asserts, because a regression to the camelCase spelling reintroduces an
+  // error-level line in `astro dev` and only *happens* to work in a browser,
+  // whose HTML parser lowercases attribute names.
+  const high = html.match(/fetchpriority="high"/g) ?? [];
+  expect(high).toHaveLength(ABOVE_THE_FOLD_CARDS);
+  expect(eager).toHaveLength(ABOVE_THE_FOLD_CARDS);
+  expect(lazy).toHaveLength(items.length - ABOVE_THE_FOLD_CARDS);
+  // A knob, not a contract — but one that stops being a hint if it grows to
+  // cover the page, which is the failure this guards.
+  expect(ABOVE_THE_FOLD_CARDS).toBeGreaterThanOrEqual(1);
+  expect(ABOVE_THE_FOLD_CARDS).toBeLessThanOrEqual(8);
+
+  // Position matters, not just the count: the eager ones have to be the first
+  // cards, or the priority hints land on images nobody sees first.
+  const firstLazy = html.indexOf('loading="lazy"');
+  const lastEager = html.lastIndexOf('loading="eager"');
+  expect(lastEager).toBeLessThan(firstLazy);
+  expect(html.indexOf('fetchpriority="high"')).toBeLessThan(firstLazy);
 });

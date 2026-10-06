@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
 import { categoryLabel } from '../../categories';
+import { transformedFeedImage } from '../../images';
 import { withTemporalFragment } from '../../media';
 import { articleDeck } from '../../site';
 import type { ExploreArticle } from '../../types';
@@ -27,52 +27,46 @@ function signalAccent(score: number): 'pitch' | 'amber' | 'live' {
 export default function ExploreCard({
   article,
   variant = 'grid',
+  priority = false,
 }: {
   article: ExploreArticle;
   variant?: 'grid' | 'list';
+  /** Above the fold: load eagerly and ask for a high fetch priority. The board
+   *  is a wall of images on a bandwidth-limited link, and with every one of them
+   *  lazy they queue behind each other — measured LCP was 3.2s at Slow-4G with
+   *  the LCP element being a card image that had not started until layout. */
+  priority?: boolean;
 }) {
   const date = publishedDate(article.publishedAt);
   const score = scoreValue(article.qualityScore);
   const domain = article.sourceDomain || 'source';
   const description = articleDeck(article);
 
-  // Engage the shimmer only when the image is genuinely still loading at
-  // hydration — cached / already-complete images stay visible and never flash.
-  const imgRef = useRef<HTMLImageElement>(null);
-  const [imgLoading, setImgLoading] = useState(false);
-  const [imgLoaded, setImgLoaded] = useState(false);
-  useEffect(() => {
-    const img = imgRef.current;
-    if (img && !img.complete) setImgLoading(true);
-  }, []);
-  const showShimmer = imgLoading && !imgLoaded;
-  // Motion runs only when the reader allows it. SSR (and the first hydration
-  // pass) render the video paused with *no* `autoplay` attribute: a rendered
-  // `autoplay` can start before the island hydrates, so cached media or slow
-  // JavaScript would otherwise expose reduced-motion readers to the looping
-  // motion this guard intends to suppress.
-  const videoRef = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const sync = () => {
-      if (query.matches) {
-        // Pause on a real frame, not an empty box: a paused video with
-        // preload="none" loads nothing, so fetch metadata explicitly.
-        video.preload = 'metadata';
-        video.load();
-        video.pause();
-        return;
-      }
-      void video.play().catch(() => {
-        /* autoplay blocked after all — the first frame still shows */
-      });
-    };
-    sync();
-    query.addEventListener('change', sync);
-    return () => query.removeEventListener('change', sync);
-  }, []);
+  // Lowercase, and spread rather than written as `fetchPriority`: React 18 does
+  // not know that spelling and logs "React does not recognize the
+  // `fetchPriority` prop on a DOM element" — an error-level line in `astro dev`
+  // — before passing it through as a custom attribute anyway. React 19 accepts
+  // both, and the lowercase form is the one it forwards to the DOM. The cast is
+  // only because @types/react 18 declares the camelCase name.
+  const priorityAttrs = priority
+    ? ({ fetchpriority: 'high' } as React.ImgHTMLAttributes<HTMLImageElement>)
+    : {};
+
+  // The publisher's CDN is asked for a card-sized image where that is known to
+  // work (see src/images.ts for the measurements). The original is carried
+  // alongside whenever the two differ, because a rule that rots answers 404/400
+  // rather than degrading — `src/scripts/board.ts` retries it once.
+  const imageSrc = transformedFeedImage(article.imageUrl);
+  const imageFallback = imageSrc === article.imageUrl ? undefined : article.imageUrl;
+
+  // Engage the shimmer only when the image is genuinely still loading — cached
+  // / already-complete images stay visible and never flash. Server-rendered with
+  // no shimmer and no hidden state; `src/scripts/board.ts` adds it after paint,
+  // which is also where a broken image gets hidden (a documented behaviour: a
+  // dead feed image must not leave a broken-image icon in the board).
+  //
+  // Nothing here is stateful any more: this component renders on the server and
+  // is never hydrated, for the first page or for an appended one.
 
   if (variant === 'list') {
     // The whole row is the outbound link: with no summary page, the card's job
@@ -135,7 +129,8 @@ export default function ExploreCard({
           // object-cover crops to fill; ragged card heights still come from
           // text length + presence of image.
           <div
-            className={`aspect-video w-full overflow-hidden bg-overlay/5${showShimmer ? ' animate-pulse' : ''}`}
+            data-image-frame
+            className="aspect-video w-full overflow-hidden bg-overlay/5"
             style={
               article.imageWidth > 0 && article.imageHeight > 0
                 ? { aspectRatio: `${article.imageWidth} / ${article.imageHeight}` }
@@ -148,37 +143,34 @@ export default function ExploreCard({
               // something visible — a metadata-only preload leaves a dark box
               // on browsers that do not paint a frame from metadata alone.
               // Muted is what makes the playback permissible; nothing has audio
-              // to surprise a reader. It starts from an effect (never an
-              // `autoplay` attribute — see above) so reduced-motion readers are
-              // never exposed, even before hydration. aria-hidden is safe here:
-              // without `controls` the element is not focusable, and the
-              // wrapping link already carries the article title as its name.
+              // to surprise a reader. No `autoplay` attribute: playback starts
+              // from `src/scripts/board.ts`, which checks reduced motion first,
+              // so a cached video cannot start looping before that check runs.
+              // aria-hidden is safe here: without `controls` the element is not
+              // focusable, and the wrapping link already carries the article
+              // title as its name.
               // biome-ignore lint/a11y/noAriaHiddenOnFocusable: a control-less <video> is not in the tab order
               <video
-                ref={videoRef}
+                data-preview
+                data-card-media
                 src={withTemporalFragment(article.imageUrl)}
                 muted
                 loop
                 playsInline
                 preload="none"
                 aria-hidden="true"
-                onError={(event) => {
-                  event.currentTarget.style.display = 'none';
-                }}
                 className="h-full w-full object-cover"
               />
             ) : (
               <img
-                ref={imgRef}
-                src={article.imageUrl}
+                data-card-media
+                {...priorityAttrs}
+                src={imageSrc}
+                data-original-src={imageFallback}
                 alt=""
                 decoding="async"
-                className={`h-full w-full object-cover transition-opacity duration-300${showShimmer ? ' opacity-0' : ' opacity-100'}`}
-                loading="lazy"
-                onLoad={() => setImgLoaded(true)}
-                onError={(event) => {
-                  event.currentTarget.style.display = 'none';
-                }}
+                className="h-full w-full object-cover transition-opacity duration-300 opacity-100"
+                loading={priority ? 'eager' : 'lazy'}
               />
             )}
           </div>
