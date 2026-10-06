@@ -33,6 +33,7 @@
     "perf:seed": "./scripts/prep-local-board.sh",
     "perf:budget": "node scripts/perf-budget.mjs",
     "perf:images": "bun scripts/perf-image-audit.ts",
+    "perf:transforms": "bun scripts/perf-image-transform-probe.ts",
     "perf:probe": "node scripts/perf-probe.mjs --url http://127.0.0.1:8787/"
   },
   "dependencies": {

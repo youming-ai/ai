@@ -221,6 +221,46 @@ it('renders rail rows tall enough to tap', () => {
   expect(link).toContain('min-h-7');
 });
 
+it('asks the publisher CDN for a card-sized image, keeping the original as a fallback', () => {
+  // Through the real renderer, so the transform is pinned where it is applied
+  // rather than only in src/images.ts. The fallback attribute is what
+  // src/scripts/board.ts retries with.
+  const html = renderToString(
+    <ExploreView
+      initialData={{
+        items: [
+          {
+            id: '1',
+            title: 'Story',
+            description: '',
+            summary: '',
+            blurb: '',
+            url: 'https://example.com/story',
+            // A host whose convention was measured (1241 KB -> 58 KB).
+            imageUrl: 'https://images.ctfassets.net/a/b/photo.png',
+            isVideo: false,
+            imageWidth: 0,
+            imageHeight: 0,
+            sourceDomain: 'example.com',
+            publishedAt: 1786080856000,
+            category: 'tools',
+            tags: ['tools'],
+            qualityScore: 82,
+            freshnessScore: 60,
+          },
+        ],
+        nextCursor: null,
+      }}
+      initialFilters={{ categories: [] }}
+    />,
+  );
+
+  expect(html).toContain(
+    'src="https://images.ctfassets.net/a/b/photo.png?w=900&amp;fm=webp&amp;q=75"',
+  );
+  expect(html).toContain('data-original-src="https://images.ctfassets.net/a/b/photo.png"');
+});
+
 it('renders the layout and theme controls with the rail, not in a toolbar', () => {
   // The toolbar was removed: the rail is the only chrome, and the controls sit
   // at its foot so they exist in both places it renders — the desktop column

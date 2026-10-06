@@ -390,6 +390,31 @@ describe('card media', () => {
     expect(play).toHaveBeenCalledOnce();
   });
 
+  it('retries once with the feed URL before hiding an image', async () => {
+    // The card asks the publisher's CDN for a card-sized image, and a publisher
+    // that changes its parameters answers 404/400 rather than degrading. So a
+    // failed transform costs one wasted request, not a missing card image.
+    const { container } = render(
+      <ExploreView
+        initialData={feed([card('a', 'story')], null)}
+        initialFilters={{ categories: [] }}
+      />,
+    );
+    await startBoard();
+
+    const image = container.querySelector<HTMLImageElement>('img[data-card-media]');
+    expect(image).not.toBeNull();
+    image!.setAttribute('data-original-src', 'https://example.com/full-size.png');
+
+    image!.dispatchEvent(new Event('error'));
+    expect(image!.getAttribute('src')).toBe('https://example.com/full-size.png');
+    expect(image!.style.display).not.toBe('none');
+
+    // A second failure on the retried URL is real: hide it.
+    image!.dispatchEvent(new Event('error'));
+    expect(image!.style.display).toBe('none');
+  });
+
   it('hides an image that fails to load', async () => {
     // The feed is third-party, so failures are normal — and a broken-image icon
     // where a story should be is a documented thing this board does not do.

@@ -1,4 +1,5 @@
 import { categoryLabel } from '../../categories';
+import { transformedFeedImage } from '../../images';
 import { withTemporalFragment } from '../../media';
 import { articleDeck } from '../../site';
 import type { ExploreArticle } from '../../types';
@@ -50,6 +51,13 @@ export default function ExploreCard({
   const priorityAttrs = priority
     ? ({ fetchpriority: 'high' } as React.ImgHTMLAttributes<HTMLImageElement>)
     : {};
+
+  // The publisher's CDN is asked for a card-sized image where that is known to
+  // work (see src/images.ts for the measurements). The original is carried
+  // alongside whenever the two differ, because a rule that rots answers 404/400
+  // rather than degrading — `src/scripts/board.ts` retries it once.
+  const imageSrc = transformedFeedImage(article.imageUrl);
+  const imageFallback = imageSrc === article.imageUrl ? undefined : article.imageUrl;
 
   // Engage the shimmer only when the image is genuinely still loading — cached
   // / already-complete images stay visible and never flash. Server-rendered with
@@ -157,7 +165,8 @@ export default function ExploreCard({
               <img
                 data-card-media
                 {...priorityAttrs}
-                src={article.imageUrl}
+                src={imageSrc}
+                data-original-src={imageFallback}
                 alt=""
                 decoding="async"
                 className="h-full w-full object-cover transition-opacity duration-300 opacity-100"

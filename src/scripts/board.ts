@@ -204,15 +204,27 @@ function initMedia(): void {
       media.classList.remove('opacity-100');
       media.classList.add('opacity-0');
     }
-    media.addEventListener('load', () => settle(frame, media), { once: true });
-    media.addEventListener(
-      'error',
-      () => {
-        frame.classList.remove('animate-pulse');
-        hide(media);
-      },
-      { once: true },
-    );
+    // One retry with the URL the feed gave us, then give up. The card asks the
+    // publisher's CDN for a card-sized image (src/images.ts), and a publisher
+    // that changes its parameters answers 404/400 rather than serving the
+    // original — measured, which is why this exists instead of trusting the
+    // rewrite. Not `{ once: true }`: the retry needs this same handler.
+    let retried = false;
+    const onError = () => {
+      const original = media.dataset.originalSrc;
+      if (!retried && original && media.getAttribute('src') !== original) {
+        retried = true;
+        media.setAttribute('src', original);
+        return;
+      }
+      frame.classList.remove('animate-pulse');
+      hide(media);
+    };
+    media.addEventListener('load', () => {
+      media.removeEventListener('error', onError);
+      settle(frame, media);
+    });
+    media.addEventListener('error', onError);
   }
 
   if (videos.length === 0) return;
