@@ -221,6 +221,44 @@ describe('board appends the next page', () => {
     expect(container.querySelector('[data-board]')?.tagName).toBe('OL');
   });
 
+  it('retries the same page when the reader asks again after a failure', async () => {
+    // The failure that motivated this: with a cursor held in state, "ask again"
+    // was an identical state update, so nothing re-ran and the button stayed
+    // enabled and inert until a reload. `load()` here is re-entrant once the
+    // in-flight guard clears, and this is what holds that.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('nope', { status: 502 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ html: '<article>second story</article>', nextCursor: null }), {
+          status: 200,
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container } = render(
+      <ExploreView
+        initialData={feed([card('a', 'first story')], 'cur-1')}
+        initialFilters={{ categories: [] }}
+      />,
+    );
+    await startBoard();
+
+    fireEvent.click(container.querySelector('[data-board-more]')!);
+    await waitFor(() =>
+      expect(container.querySelector<HTMLElement>('[data-board-error]')?.hidden).toBe(false),
+    );
+
+    fireEvent.click(container.querySelector('[data-board-more]')!);
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-board]')?.innerHTML).toContain('second story');
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // And the error the reader was shown is cleared by the successful retry.
+    expect(container.querySelector<HTMLElement>('[data-board-error]')?.hidden).toBe(true);
+  });
+
   it('keeps the page and reports the failure when a page cannot be fetched', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('nope', { status: 502 })));
 
