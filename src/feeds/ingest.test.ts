@@ -43,7 +43,7 @@ function item(title: string, link: string, description = 'x'): string {
  *  every article INSERT so a test can assert on what reached the database
  *  rather than on what the report claims. */
 function ingestDb(
-  { changes = 1, enabled = ['poche-explore'] }: { changes?: number; enabled?: string[] } = {},
+  { changes = 1, enabled = ['toms-hardware'] }: { changes?: number; enabled?: string[] } = {},
   stored: { fingerprints?: string[]; urls?: string[] } = {},
 ) {
   const inserted: unknown[][] = [];
@@ -303,7 +303,7 @@ describe('the fetch retry policy', () => {
     const report = await ingestAllSources(envWith(ingestDb().db));
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(report.failed).toEqual(['poche-explore']);
+    expect(report.failed).toEqual(['toms-hardware']);
     expect(report.fetched).toBe(0);
   });
 
@@ -314,7 +314,7 @@ describe('the fetch retry policy', () => {
     const report = await ingestAllSources(envWith(ingestDb().db));
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(report.failed).toEqual(['poche-explore']);
+    expect(report.failed).toEqual(['toms-hardware']);
     expect(report.fetched).toBe(0);
   });
 
@@ -325,7 +325,7 @@ describe('the fetch retry policy', () => {
     const report = await ingestAllSources(envWith(ingestDb().db));
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(report.failed).toEqual(['poche-explore']);
+    expect(report.failed).toEqual(['toms-hardware']);
   });
 
   it('bounds every attempt with the same deadline', async () => {
@@ -389,5 +389,75 @@ describe('sources that are disabled', () => {
 
     expect(report.sources).toBe(0);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('the freshness window and the per-source cap', () => {
+  /** An item with a real pubDate, so the window has something to measure. */
+  function datedItem(index: number, daysAgo: number): string {
+    const published = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toUTCString();
+    return `<item><title>Story ${index}</title><link>https://example.com/${index}</link><description>Text for story ${index}.</description><pubDate>${published}</pubDate></item>`;
+  }
+
+  it('drops items older than the window before anything else happens', async () => {
+    // Nine of the desk's twelve feeds are archives: openai.com/news returned
+    // 1247 items on the day this shipped. Without the window the first tick
+    // stores years of history.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(feedOf(datedItem(1, 0), datedItem(2, 30), datedItem(3, 400)), {
+          status: 200,
+        }),
+      ),
+    );
+
+    const { db, inserted } = ingestDb();
+    const report = await ingestAllSources(envWith(db));
+
+    expect(report.fetched).toBe(1);
+    expect(report.trimmed).toBe(2);
+    expect(report.stored).toBe(1);
+    expect(inserted).toHaveLength(1);
+  });
+
+  it('keeps the newest maxItems and reports the rest as trimmed', async () => {
+    // toms-hardware is capped at 30 and returned 50 items when the desk was
+    // built; the cap is what bounds a tick.
+    const items = Array.from({ length: 35 }, (_, index) => datedItem(index, index * 0.01));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response(feedOf(...items), { status: 200 })),
+    );
+
+    const { db, inserted } = ingestDb();
+    const report = await ingestAllSources(envWith(db));
+
+    expect(report.fetched).toBe(30);
+    expect(report.trimmed).toBe(5);
+    // Newest first: story 0 is the freshest and must survive the cap, the five
+    // oldest must not.
+    const urls = inserted.map((params) => params[2]);
+    expect(urls).toContain('https://example.com/0');
+    expect(urls).not.toContain('https://example.com/34');
+    expect(urls).toHaveLength(30);
+  });
+
+  it('reports fetched and trimmed as one population', async () => {
+    // The two counts together are what the source actually offered; a tick that
+    // silently dropped items without saying so is what the log line is for.
+    const items = [
+      ...Array.from({ length: 32 }, (_, index) => datedItem(index, 0)),
+      datedItem(99, 90),
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response(feedOf(...items), { status: 200 })),
+    );
+
+    const report = await ingestAllSources(envWith(ingestDb().db));
+
+    expect(report.fetched + report.trimmed).toBe(33);
+    expect(report.fetched).toBe(30);
   });
 });

@@ -24,6 +24,7 @@ const source: FeedSource = {
   url: 'https://example.com/rss.xml',
   authorityScore: 80,
   defaultEnabled: true,
+  maxItems: 50,
 };
 
 describe('parseRss', () => {

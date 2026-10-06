@@ -1,2 +1,9 @@
 # Copy this file to .dev.vars (which is gitignored) and fill in real values.
-# No secrets required for Poche direct feed.
+#
+# The only secret the desk needs. Without it the local worker still runs: it
+# ingests the feeds, serves uncurated rows, and reports the curator as
+# unconfigured — /api/health shows the queue growing instead.
+#
+# The endpoint and model come from [vars] in wrangler.toml (LLM_BASE_URL,
+# LLM_MODEL), so override them here only to point local dev at another provider.
+LLM_API_KEY=

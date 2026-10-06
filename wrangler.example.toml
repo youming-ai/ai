@@ -1,12 +1,19 @@
 # Example: copy to wrangler.toml and fill ids
 # See README.md Quick start
-# Astro SSR on Workers: a D1-backed explore feed with a KV SWR cache in front of
-# it. The cron pulls the curated Poche Explore RSS into D1; `/media/*` is relayed
-# by the entrypoint before Astro sees the request.
+# Astro SSR on Workers: an AI-hardware desk with a D1-backed feed and a KV SWR
+# cache in front of it. The cron pulls the desk's RSS sources into D1 and then
+# curates the new rows with an OpenAI-compatible model; `/media/*` is relayed by
+# the entrypoint before Astro sees the request.
 name = "umuo"
 compatibility_date = "2026-07-17"
 compatibility_flags = ["nodejs_compat"]
 main = "./worker/entrypoint.ts"
+
+# Any OpenAI-compatible /chat/completions endpoint. LLM_API_KEY is a secret
+# (`wrangler secret put LLM_API_KEY`), never a var, so it stays out of git.
+[vars]
+LLM_BASE_URL = "https://api.b.ai/v1"
+LLM_MODEL = "mimo-v2.6-flash"
 
 [observability]
 enabled = true

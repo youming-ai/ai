@@ -1,6 +1,6 @@
 import { CATEGORIES } from '../categories';
 import type { Env } from '../data/api';
-import type { RawArticle } from './types';
+import type { ArticleEnrichment, RawArticle } from './types';
 
 /** Quality score when the source declares no authority rating. */
 const DEFAULT_QUALITY_SCORE = 50;
@@ -78,4 +78,74 @@ export async function storeArticle(env: Env, article: RawArticle): Promise<boole
     )
     .run();
   return (result.meta?.changes ?? 0) > 0;
+}
+
+/** Apply one validated curation result to a stored row.
+ *
+ *  This is the only place `ai_summary`, `ai_blurb`, `quality_score`,
+ *  `article_type`, `category` and `is_on_topic` are set from a model, and the
+ *  only place `article_tags` rows are written at all.
+ *
+ *  Two decisions worth keeping:
+ *
+ *  - `status = 'filtered'` is how an off-beat story leaves the board. The row
+ *    stays: deleting it would drop the `fingerprint`/`canonical_url` dedupe
+ *    guards and the next tick would ingest the same story again. Every read path
+ *    already filters on `status = 'published'`.
+ *  - Tags are *replaced*, and a tag identical to the assigned category is
+ *    dropped before the write. Mirroring the category into `article_tags` is the
+ *    exact defect migration 0012 had to purge — cards rendered
+ *    "Development · development" and the RSS emitted the term as both a category
+ *    and a tag. The guard lives here so a caller cannot reintroduce it. */
+export async function applyEnrichment(
+  env: Env,
+  articleId: string,
+  enrichment: ArticleEnrichment,
+): Promise<void> {
+  const category = canonicalCategory(enrichment.category);
+  const tags = [
+    ...new Set(
+      enrichment.tags
+        .map((tag) => tag.trim().toLowerCase())
+        .filter((tag) => tag.length > 0 && tag !== category),
+    ),
+  ].slice(0, 8);
+  const now = Date.now();
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE articles SET
+         ai_summary = ?, ai_blurb = ?, quality_score = ?, category = ?, article_type = ?,
+         is_on_topic = ?, status = ?, enriched_at = ?, updated_at = ?
+       WHERE id = ?`,
+    ).bind(
+      enrichment.summary,
+      enrichment.blurb,
+      enrichment.qualityScore,
+      category,
+      enrichment.articleType,
+      enrichment.isOnTopic ? 1 : 0,
+      enrichment.isOnTopic ? 'published' : 'filtered',
+      now,
+      now,
+      articleId,
+    ),
+    env.DB.prepare('DELETE FROM article_tags WHERE article_id = ?').bind(articleId),
+    ...tags.map((tag) =>
+      env.DB.prepare('INSERT OR IGNORE INTO article_tags (article_id, tag) VALUES (?, ?)').bind(
+        articleId,
+        tag,
+      ),
+    ),
+  ]);
+}
+
+/** Take a story out of the curation queue without judging it: too little text
+ *  for the model to work with. `enriched_at` is still set, otherwise the story
+ *  would be re-selected every tick and counted as pending forever; it keeps the
+ *  deck `storeArticle` wrote from the feed teaser. */
+export async function markCurationSkipped(env: Env, articleId: string): Promise<void> {
+  const now = Date.now();
+  await env.DB.prepare('UPDATE articles SET enriched_at = ?, updated_at = ? WHERE id = ?')
+    .bind(now, now, articleId)
+    .run();
 }

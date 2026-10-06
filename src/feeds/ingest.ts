@@ -3,7 +3,7 @@ import { SITE_NAME, SITE_ORIGIN } from '../site';
 import { sleep } from '../utils/coerce';
 import { canonicalCategory, normalizeTitle, storeArticle } from './enrich';
 import { parseRss } from './rss';
-import { FEED_SOURCES } from './sources';
+import { FEED_SOURCES, INGEST_MAX_AGE_MS } from './sources';
 import type { FeedSource, RawArticle } from './types';
 
 // D1 caps bound variables per statement, so the fingerprint and canonical URL
@@ -64,13 +64,28 @@ async function fetchWithRetry(url: string, headers: Record<string, string>): Pro
   throw new Error('feed fetch failed');
 }
 
+/** Fetch one source and reduce it to the items this tick may consider.
+ *
+ *  The order is window-then-cap, and both halves are load-bearing. Several
+ *  publishers ship their whole archive (openai.com/news returns 1247 items), so
+ *  without the window the first tick stores years of history; without the cap a
+ *  single source can still hand the curator a thousand stories it is never going
+ *  to get through. Capping before the window would just slice the archive.
+ *
+ *  Undated items are stamped with `fetchedAt` by `parseRss`, so they pass the
+ *  window rather than being dropped. */
 async function readSource(
   source: FeedSource,
   fetchedAt: number,
-): Promise<Omit<RawArticle, 'canonicalUrl' | 'fingerprint'>[]> {
+): Promise<{ items: Omit<RawArticle, 'canonicalUrl' | 'fingerprint'>[]; trimmed: number }> {
   const response = await fetchWithRetry(source.url, RSS_HEADERS);
   if (!response.ok) throw new Error(`${source.name} returned ${response.status}`);
-  return parseRss(await response.text(), source, fetchedAt);
+  const parsed = parseRss(await response.text(), source, fetchedAt);
+  const fresh = parsed
+    .filter((item) => item.publishedAt >= fetchedAt - INGEST_MAX_AGE_MS)
+    .sort((a, b) => b.publishedAt - a.publishedAt)
+    .slice(0, source.maxItems);
+  return { items: fresh, trimmed: parsed.length - fresh.length };
 }
 
 async function normalizeArticles(
@@ -212,11 +227,18 @@ async function knownCrossSourceTitles(
 interface IngestReport {
   sources: number;
   fetched: number;
+  /** Parsed items dropped by the freshness window or the per-source cap before
+   *  any dedupe ran. Worth reporting: a publisher switching to a full-archive
+   *  feed shows up here as a jump, not as a silently longer tick. */
+  trimmed: number;
   /** Already stored or deduplicated, so never written again. */
   skipped: number;
   /** Newly normalized and stored in this tick. */
   stored: number;
-  /** Fetched items with no category accepted by the registry. */
+  /** Fetched items whose *publisher* category is not a registry value. Since
+   *  the curator assigns the stored category from the story text, this is a
+   *  publisher-taxonomy signal, not a hole in the board — the scheduled handler
+   *  logs it at info level for that reason. */
   uncategorized: number;
   /** Distinct raw publisher categories behind `uncategorized`, so a taxonomy
    *  drift upstream is diagnosable from the log instead of only countable. */
@@ -235,12 +257,12 @@ export async function ingestAllSources(env: Env, _ctx?: ExecutionContext): Promi
   const results = await Promise.all(
     sources.map(async (source) => {
       try {
-        const raw = await readSource(source, Date.now());
-        const articles = await normalizeArticles(source, raw);
-        return { source, articles, error: '' };
+        const { items, trimmed } = await readSource(source, Date.now());
+        const articles = await normalizeArticles(source, items);
+        return { source, articles, trimmed, error: '' };
       } catch (error) {
         console.error(`[ingest] ${source.id} failed:`, error);
-        return { source, articles: [], error: source.id };
+        return { source, articles: [], trimmed: 0, error: source.id };
       }
     }),
   );
@@ -300,6 +322,7 @@ export async function ingestAllSources(env: Env, _ctx?: ExecutionContext): Promi
   return {
     sources: sources.length,
     fetched: fetched.length,
+    trimmed: results.reduce((sum, result) => sum + result.trimmed, 0),
     skipped: fetched.length - articles.length + conflicted,
     stored,
     uncategorized: unmapped.length,

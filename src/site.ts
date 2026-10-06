@@ -7,9 +7,9 @@ export const SITE_ORIGIN = 'https://umuo.app';
 // defaults and the RSS channel description import from here, so a rebrand
 // or positioning change edits one file, not three.
 export const SITE_NAME = 'umuo';
-export const SITE_TITLE = 'umuo — Curated explore feed';
+export const SITE_TITLE = 'umuo — AI hardware desk';
 export const SITE_DESCRIPTION =
-  'Curated links, tools, design, and articles from the web, organized by category.';
+  'Accelerators, processors, servers, memory and the datacenter build-out behind AI — collected from the hardware press and curated by model.';
 
 /** Scope label for the global (uncategorised) feed: the rail's All row and the
  *  RSS channel-title marker. Single source of truth so the marker comparison in

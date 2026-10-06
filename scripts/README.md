@@ -1,6 +1,6 @@
 # Render-performance harness
 
-Four tools and the record of what they measured. They exist because every claim
+Five tools and the record of what they measured. They exist because every claim
 about this app's performance should be reproducible by someone who does not
 trust the prose — including the numbers below, which lived only in PR
 descriptions until this file.
@@ -14,6 +14,7 @@ descriptions until this file.
 | `bun run perf:seed` | Seeds a deterministic 200-row board into the local D1 that the *built* worker reads. |
 | `bun run perf:images` | Audits the live feed's card images through the real `parseRss`: total, median, largest, formats, and the fold's weight. |
 | `bun run perf:transforms` | Re-checks every image host against the live feed for the free transform parameters `src/images.ts` relies on. `--all` reports the coverage those rules buy. |
+| `bun run feeds:probe` | The source registry's own instrument, kept here rather than in `src/`: fetches every entry in `FEED_SOURCES` with the real `parseRss` and reports liveness, parsed vs kept item counts (the freshness window and the per-source cap), median text length, images and publisher categories. Run it before changing a source, a cap, or the parser — the registry is only as good as its last measurement. |
 
 ## Measuring, in order
 
