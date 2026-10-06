@@ -204,8 +204,13 @@ export default function ExploreView({
   // places the rail is rendered. The theme control exists twice for the same
   // reason, and `src/scripts/board.ts` keeps both copies in step through
   // `data-theme` on the root.
+  //
+  // `justify-between` puts the layout toggle at the row's left edge and the
+  // theme control at its right, which is the rail's own inner edge in the
+  // desktop column. The two are the only children, so nothing sits between them
+  // for the free space to split around.
   const controls: ReactNode = (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center justify-between gap-2">
       <nav className="ds-segmented shrink-0" aria-label="Feed layout">
         {(['grid', 'list'] as const).map((view) => (
           <a
