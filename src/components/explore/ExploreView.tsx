@@ -275,11 +275,16 @@ export default function ExploreView({
                 </button>
               )}
               <p data-board-error hidden role="alert" className="ds-caption text-live" />
-              {cursor === '' && (
-                <p className="ds-caption uppercase tracking-caption text-chalkdim">
-                  End of the feed
-                </p>
-              )}
+              {/* Rendered whenever there is a board, and merely hidden while
+                  more pages exist: the script reveals it when the last page
+                  arrives, and it cannot reveal an element that is not there. */}
+              <p
+                data-board-end
+                hidden={cursor !== ''}
+                className="ds-caption uppercase tracking-caption text-chalkdim"
+              >
+                End of the feed
+              </p>
             </div>
           )}
         </div>

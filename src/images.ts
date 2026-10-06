@@ -2,9 +2,10 @@
 //
 // The paid resizing entitlement was declined, which leaves the fact that most of
 // these hosts ship their own transform parameters. Measured against the live
-// feed (`bun scripts/perf-image-transform-probe.ts`, and `--all` for coverage):
+// feed (`bun run perf:transforms`, and `--all` for coverage), which imports the
+// table below rather than restating it — the two had already drifted once:
 //
-//   whole feed    13,271 KB -> 11,498 KB   (-13%)
+//   whole feed    13,271 KB -> 11,515 KB   (-13%)
 //   first 10       2,257 KB ->    978 KB   (-57% of the fold)
 //   images touched           7 of 49
 //

@@ -221,6 +221,40 @@ describe('board appends the next page', () => {
     expect(container.querySelector('[data-board]')?.tagName).toBe('OL');
   });
 
+  it('says the feed has ended once the last page arrives', async () => {
+    // The defect this pins: the script looked for `[data-board-end]`, the markup
+    // never rendered it, and `showEnd()` therefore only hid the button — so
+    // exhausting the feed made "Load more" vanish with no explanation, where the
+    // React version it replaced had shown the note.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ html: '<article>last</article>', nextCursor: null }), {
+          status: 200,
+        }),
+      ),
+    );
+
+    const { container } = render(
+      <ExploreView
+        initialData={feed([card('a', 'first story')], 'cur-1')}
+        initialFilters={{ categories: [] }}
+      />,
+    );
+    await startBoard();
+
+    const note = container.querySelector<HTMLElement>('[data-board-end]');
+    expect(note, 'the end note is in the markup').not.toBeNull();
+    expect(note!.hidden, 'hidden while another page exists').toBe(true);
+
+    fireEvent.click(container.querySelector('[data-board-more]')!);
+
+    await waitFor(() => expect(note!.hidden).toBe(false));
+    expect(container.querySelector('[data-board-more]')).not.toBeNull();
+    expect(container.querySelector<HTMLElement>('[data-board-more]')!.hidden).toBe(true);
+    expect(note!.textContent).toContain('End of the feed');
+  });
+
   it('retries the same page when the reader asks again after a failure', async () => {
     // The failure that motivated this: with a cursor held in state, "ask again"
     // was an identical state update, so nothing re-ran and the button stayed
@@ -230,9 +264,12 @@ describe('board appends the next page', () => {
       .fn()
       .mockResolvedValueOnce(new Response('nope', { status: 502 }))
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ html: '<article>second story</article>', nextCursor: null }), {
-          status: 200,
-        }),
+        new Response(
+          JSON.stringify({ html: '<article>second story</article>', nextCursor: null }),
+          {
+            status: 200,
+          },
+        ),
       );
     vi.stubGlobal('fetch', fetchMock);
 
@@ -451,6 +488,56 @@ describe('card media', () => {
     // A second failure on the retried URL is real: hide it.
     image!.dispatchEvent(new Event('error'));
     expect(image!.style.display).toBe('none');
+  });
+
+  it('wires the media inside an appended page, not only the first one', async () => {
+    // Regression: `wireMedia` ran once at startup, so cards from page 2 onwards
+    // had no broken-image handling, no transform fallback and a video preview
+    // that never started. The React version could not have this bug — every
+    // appended card mounted its own effects.
+    const { play } = stubPlayback();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            // Wrapped in <article> the way a real card is: the frame sits
+            // inside the card, which is what wireMedia walks.
+            html:
+              '<article><div data-image-frame><img data-card-media src="/broken.png" ' +
+              'data-original-src="/full.png"></div></article>' +
+              '<article><div data-image-frame><video data-preview data-card-media ' +
+              'preload="none"></video></div></article>',
+            nextCursor: null,
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    const { container } = render(
+      <ExploreView
+        initialData={feed([card('a', 'first story')], 'cur-1')}
+        initialFilters={{ categories: [] }}
+      />,
+    );
+    await startBoard();
+
+    fireEvent.click(container.querySelector('[data-board-more]')!);
+    await waitFor(() =>
+      expect(container.querySelector('[data-board]')?.innerHTML).toContain('broken.png'),
+    );
+
+    // The appended image gets the same transform fallback as a first-page one.
+    const appended = container.querySelector<HTMLImageElement>('img[src="/broken.png"]');
+    expect(appended).not.toBeNull();
+    appended!.dispatchEvent(new Event('error'));
+    expect(appended!.getAttribute('src')).toBe('/full.png');
+
+    // And the appended video preview is started, not left as a dark box.
+    const video = container.querySelector<HTMLVideoElement>('video[data-card-media]');
+    expect(video).not.toBeNull();
+    await waitFor(() => expect(play).toHaveBeenCalled());
   });
 
   it('hides an image that fails to load', async () => {

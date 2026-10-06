@@ -6,7 +6,7 @@
 # a fresh, empty database and the board renders its empty state. Measurements
 # taken without this step compare two different corpora.
 #
-# Also seeds a deterministic board: 48 published rows across all 8 hubs, each
+# Also seeds a deterministic board: 200 published rows across all 8 hubs, each
 # pointing at /og.png?i=<n> so the image bytes and count are hermetic (no
 # third-party CDN) while still being a wall of images, which is what the board
 # actually is. Real feed images are proxied through /media/<uuid> in production.

@@ -16,6 +16,11 @@
 //
 // Run: bun scripts/perf-image-transform-probe.ts
 import { parseRss } from '../src/feeds/rss';
+// The rule under test is production's, imported rather than restated: this file
+// previously carried its own copy of the table and the two had already drifted
+// (this one used Shopify's cropping `&height=` variant, production does not), so
+// the coverage figure it reported was measured against a rule we do not ship.
+import { transformedFeedImage } from '../src/images';
 import { FEED_SOURCES } from '../src/feeds/sources';
 import { SITE_NAME, SITE_ORIGIN } from '../src/site';
 
@@ -138,20 +143,6 @@ const kb = (bytes: number): string => `${Math.round(bytes / 1024)} KB`;
 // sample proved work, which is the number that decides whether a table is worth
 // carrying: how much of the corpus and of the fold those hosts actually cover.
 const ALL = process.argv.includes('--all');
-/** Only rules a sample above actually reduced. Anything else stays untouched. */
-const PROVEN = new Map<string, string[]>([
-  ['ctfassets.net', [`?w=${TARGET_WIDTH}&fm=webp&q=75`]],
-  ['twimg.com', ['?format=webp&name=small']],
-  ['shopify.com', [`?width=${TARGET_WIDTH}&height=${Math.round((TARGET_WIDTH * 9) / 16)}`]],
-]);
-
-function provenParams(host: string): string[] | null {
-  for (const [suffix, params] of PROVEN) {
-    if (host === suffix || host.endsWith(`.${suffix}`)) return params;
-  }
-  return null;
-}
-
 if (ALL) {
   const unique: string[] = [];
   const seen = new Set<string>();
@@ -169,16 +160,11 @@ if (ALL) {
   for (const [index, url] of unique.entries()) {
     const original = await measure(url);
     if (!original) continue;
-    const host = new URL(url).hostname;
-    const params = provenParams(host);
     let best = original.bytes;
-    if (params) {
-      for (const candidate of params) {
-        const attempt = await measure(`${url}${candidate}`);
-        if (attempt?.type.startsWith('image/') && attempt.bytes < best) {
-          best = attempt.bytes;
-        }
-      }
+    const transformed = transformedFeedImage(url);
+    if (transformed !== url) {
+      const attempt = await measure(transformed);
+      if (attempt?.type.startsWith('image/') && attempt.bytes < best) best = attempt.bytes;
       if (best < original.bytes) matched += 1;
     }
     originalTotal += original.bytes;

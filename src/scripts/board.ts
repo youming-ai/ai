@@ -62,6 +62,8 @@ function initAppend(board: HTMLElement): void {
     if (failed) failed.hidden = true;
 
     try {
+      // Matches EXPLORE_MAX_LIMIT (src/data/explore.ts). Written out rather than
+      // imported: that module pulls the D1/KV layer into the browser bundle.
       const params = new URLSearchParams({ view, cursor, limit: '24' });
       if (category) params.set('category', category);
       const response = await fetch(`/cards.json?${params}`);
@@ -70,7 +72,13 @@ function initAppend(board: HTMLElement): void {
 
       // beforeend on the board itself: <article> into the masonry section,
       // <li> into the list. Both are what the server would have produced.
+      const existing = board.children.length;
       board.insertAdjacentHTML('beforeend', page.html);
+      // Wire only what arrived. The React version got this for free — every
+      // appended card mounted its own effects — and forgetting it meant page 2
+      // onwards had no broken-image handling, no transform fallback and no
+      // playing video previews.
+      wireMedia(Array.from(board.children).slice(existing));
       cursor = page.nextCursor ?? '';
       sentinel.dataset.cursor = cursor;
       if (cursor) showMore();
@@ -174,8 +182,18 @@ function initTheme(): void {
  *    which is why the markup carries no `autoplay` attribute at all.
  *  The shimmer is the cosmetic third: it only engages for an image that is still
  *  loading, so a cached image never flashes. */
-function initMedia(): void {
-  const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+/** Previews collected across the initial render and every appended page, so one
+ *  motion-preference listener governs all of them. */
+const previewVideos: HTMLVideoElement[] = [];
+let reducedMotion: MediaQueryList | null = null;
+
+/** Wire card media inside `roots`: images and video thumbnails. Called once for
+ *  the server-rendered cards and again for each appended page. */
+/** `Element | Document` rather than `ParentNode`: the DOM lib gives `Element`
+ *  an `append` overload set that is not assignable to `ParentNode`'s, so a plain
+ *  `Element[]` will not typecheck against it. Both members have the one method
+ *  this needs. */
+function wireMedia(roots: (Element | Document)[]): void {
   const hide = (element: HTMLElement): void => {
     // `style.display` rather than the `hidden` attribute, because the element
     // carries layout classes that would win over the UA's [hidden] rule.
@@ -187,13 +205,14 @@ function initMedia(): void {
     media.classList.add('opacity-100');
   };
 
-  const videos: HTMLVideoElement[] = [];
-  for (const frame of document.querySelectorAll<HTMLElement>('[data-image-frame]')) {
+  for (const frame of roots.flatMap((root) =>
+    Array.from(root.querySelectorAll<HTMLElement>('[data-image-frame]')),
+  )) {
     const media = frame.querySelector<HTMLElement>('[data-card-media]');
     if (!media) continue;
 
     if (media instanceof HTMLVideoElement) {
-      videos.push(media);
+      previewVideos.push(media);
       media.addEventListener('error', () => hide(media), { once: true });
       continue;
     }
@@ -227,30 +246,35 @@ function initMedia(): void {
     media.addEventListener('error', onError);
   }
 
-  if (videos.length === 0) return;
-  const sync = (): void => {
-    for (const video of videos) {
-      if (query.matches) {
-        // Pause on a real frame: a paused video with preload="none" has fetched
-        // nothing, so ask for metadata explicitly.
-        video.preload = 'metadata';
-        video.load();
-        video.pause();
-      } else {
-        void video.play().catch(() => {
-          /* autoplay blocked after all — the first frame still shows */
-        });
-      }
+  syncPreviews();
+}
+
+/** Play or hold every preview collected so far, per the reader's motion
+ *  preference. Shared by the initial cards and every appended page. */
+function syncPreviews(): void {
+  if (!reducedMotion) return;
+  for (const video of previewVideos) {
+    if (reducedMotion.matches) {
+      // Pause on a real frame: a paused video with preload="none" has fetched
+      // nothing, so ask for metadata explicitly.
+      video.preload = 'metadata';
+      video.load();
+      video.pause();
+    } else {
+      void video.play().catch(() => {
+        /* autoplay blocked after all — the first frame still shows */
+      });
     }
-  };
-  sync();
-  query.addEventListener('change', sync);
+  }
 }
 
 // There is exactly one board per document; the sentinel is its sibling, not a
 // descendant, which is why these are document-level lookups.
+reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+reducedMotion.addEventListener('change', syncPreviews);
+wireMedia([document]);
+
 const board = document.querySelector<HTMLElement>('[data-board]');
 if (board) initAppend(board);
 initTheme();
-initMedia();
 export {};
