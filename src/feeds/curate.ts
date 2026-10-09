@@ -38,13 +38,30 @@ export const CURATION_LIMIT = 4;
  *  long — `CURATION_LIMIT` is. */
 export const CURATION_BATCH_SIZE = 8;
 
-/** How many times a story may fail before the curator stops picking it up.
+/** How many times a story may be attempted before the curator stops picking it up.
  *
  *  Without a cap a permanently unjudgeable story (a feed that returns 200 with a
  *  truncated body, say) would be retried every 15 minutes forever, spending a
- *  model call each time and never leaving the queue. The count is read from
- *  `agent_runs`, so the cap is durable across ticks and isolates. */
+ *  model call each time and never leaving the queue. The count is of claims in
+ *  `agent_runs` (see `claim`), so the cap is durable across ticks and isolates,
+ *  and an attempt is spent even when the invocation dies before its outcome. */
 export const MAX_CURATION_ATTEMPTS = 3;
+
+/** How long a claim keeps other invocations off a story. Longer than the 15-minute
+ *  wall-clock limit Cloudflare puts on a scheduled invocation, so a claim can
+ *  never lapse while its holder is still alive — only after it was killed. */
+export const CURATION_LEASE_MS = 20 * 60_000;
+
+/** A story some invocation may take now: still uncurated, under the attempt cap,
+ *  and not held by a live claim. Correlated on `a.id` so both lookups ride the
+ *  (article_fingerprint, status) index for the handful of pending rows instead of
+ *  aggregating the whole run log. Binds: MAX_CURATION_ATTEMPTS, lease cutoff. */
+const CLAIMABLE = `a.enriched_at IS NULL
+       AND a.status = 'published'
+       AND (SELECT COUNT(*) FROM agent_runs r
+             WHERE r.article_fingerprint = a.id AND r.status = 'processing') < ?
+       AND NOT EXISTS (SELECT 1 FROM agent_runs r
+             WHERE r.article_fingerprint = a.id AND r.status = 'processing' AND r.started_at > ?)`;
 
 export interface CurationReport {
   /** false when LLM_API_KEY / LLM_BASE_URL / LLM_MODEL are not all configured:
@@ -66,30 +83,22 @@ interface PendingArticle extends CuratorArticle {
   sourceId: string;
 }
 
-/** Select the work: newest uncurated published rows, minus anything that has
- *  already burned its attempts.
+/** Select the work: newest claimable rows. Only a candidate list — two
+ *  invocations can read the same rows here, and `claim` is what decides.
  *
  *  `agent_runs.article_fingerprint` is `articles.id` — `storeArticle` uses the
- *  fingerprint as the primary key — so the failure tally joins on the id. */
-async function pendingArticles(env: Env, limit: number): Promise<PendingArticle[]> {
+ *  fingerprint as the primary key — so the run log joins on the id. */
+async function pendingArticles(env: Env, limit: number, now: number): Promise<PendingArticle[]> {
   const result = await env.DB.prepare(
     `SELECT a.id, a.source_id AS source_id, s.name AS source_name, a.title, a.description,
             a.canonical_url AS url
      FROM articles a
      JOIN sources s ON s.id = a.source_id
-     LEFT JOIN (
-       SELECT article_fingerprint, COUNT(*) AS failures
-       FROM agent_runs
-       WHERE status = 'failed'
-       GROUP BY article_fingerprint
-     ) f ON f.article_fingerprint = a.id
-     WHERE a.enriched_at IS NULL
-       AND a.status = 'published'
-       AND COALESCE(f.failures, 0) < ?
+     WHERE ${CLAIMABLE}
      ORDER BY a.published_at DESC
      LIMIT ?`,
   )
-    .bind(MAX_CURATION_ATTEMPTS, limit)
+    .bind(MAX_CURATION_ATTEMPTS, now - CURATION_LEASE_MS, limit)
     .all<Record<string, unknown>>();
 
   const strings = (row: Record<string, unknown>) => ({
@@ -106,8 +115,39 @@ async function pendingArticles(env: Env, limit: number): Promise<PendingArticle[
     .filter((row) => row.id !== '' && row.sourceId !== '' && row.title !== '');
 }
 
-/** Append to the run log. One row per story per outcome, which is what the
- *  failure cap reads back and what makes "did the AI run, and what happened to
+/** Take a story for this invocation, atomically: one INSERT … SELECT that only
+ *  writes a 'processing' row when the story is still claimable. D1 runs
+ *  statements one at a time, so of two invocations racing for the same row
+ *  exactly one sees `changes = 1` — measured before this existed, 21% of
+ *  production runs were a second, concurrent judgement of an already-taken story.
+ *
+ *  The claim is also the attempt: the cap counts 'processing' rows, so an
+ *  invocation the platform kills mid-batch — before any outcome is written —
+ *  still spends the attempt, and a story that keeps killing ticks parks after
+ *  MAX_CURATION_ATTEMPTS instead of being re-selected forever. */
+async function claim(env: Env, article: PendingArticle, model: string, now: number) {
+  const result = await env.DB.prepare(
+    `INSERT INTO agent_runs (
+       id, article_fingerprint, source_id, status, model, article_id, error, started_at
+     )
+     SELECT ?, a.id, a.source_id, 'processing', ?, a.id, '', ?
+     FROM articles a
+     WHERE a.id = ? AND ${CLAIMABLE}`,
+  )
+    .bind(
+      crypto.randomUUID(),
+      model,
+      now,
+      article.id,
+      MAX_CURATION_ATTEMPTS,
+      now - CURATION_LEASE_MS,
+    )
+    .run();
+  return (result.meta?.changes ?? 0) > 0;
+}
+
+/** Append to the run log. One row per story per outcome, beside the claim
+ *  that started it — which is what makes "did the AI run, and what happened to
  *  this story" answerable from D1 rather than from logs that have aged out. */
 async function recordRun(
   env: Env,
@@ -213,7 +253,11 @@ export async function curatePending(env: Env): Promise<CurationReport> {
   // behaviour and says so in the report.
   if (!report.configured) return report;
 
-  const pending = await pendingArticles(env, CURATION_LIMIT);
+  const now = Date.now();
+  const pending: PendingArticle[] = [];
+  for (const candidate of await pendingArticles(env, CURATION_LIMIT, now)) {
+    if (await claim(env, candidate, model, now)) pending.push(candidate);
+  }
   report.selected = pending.length;
   if (pending.length === 0) return report;
 
@@ -250,7 +294,7 @@ export async function curatePending(env: Env): Promise<CurationReport> {
         else report.filtered += 1;
       } catch (writeError) {
         // The row keeps its pre-curation values and `enriched_at` stays NULL, so
-        // the next tick retries it; the run row makes the retry countable.
+        // the next tick retries it; the claim already counted this attempt.
         report.failed += 1;
         console.error(`[curate] ${article.id} write failed:`, writeError);
         await recordRun(
