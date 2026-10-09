@@ -1,13 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CURATOR_CATEGORY_KEYS } from '../categories';
+import { CURATION_BUDGET_MS, CurationBudget, CurationBudgetError } from './curationPolicy';
+import type { CuratorArticle } from './llm';
 import {
-  CuratorTimeoutError,
   __promptInternals,
+  CuratorTimeoutError,
   enrichBatchWithLLM,
   enrichWithLLM,
   parseEnrichment,
 } from './llm';
-import type { CuratorArticle } from './llm';
 import { ARTICLE_TYPES } from './types';
 
 // The curator's transport and its validators. The client itself was written for
@@ -17,6 +18,7 @@ import { ARTICLE_TYPES } from './types';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 const story: CuratorArticle = {
@@ -245,6 +247,131 @@ describe('enrichBatchWithLLM', () => {
 
     await expect(enrichBatchWithLLM('secret', BASE_URL, MODEL, [])).resolves.toEqual([]);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('shared execution deadline', () => {
+  function startBudget(elapsed = 0) {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const budget = new CurationBudget();
+    vi.setSystemTime(elapsed);
+    return budget;
+  }
+
+  function stalledFetch(bodyOnly = false) {
+    const signals: AbortSignal[] = [];
+    const mock = vi.fn(async (_url: string, init: RequestInit) => {
+      const signal = init.signal!;
+      signals.push(signal);
+      if (bodyOnly) {
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              signal.addEventListener('abort', () => controller.error(signal.reason), {
+                once: true,
+              });
+            },
+          }),
+        );
+      }
+      return new Promise<Response>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    });
+    vi.stubGlobal('fetch', mock);
+    return { mock, signals };
+  }
+
+  it.each([
+    false,
+    true,
+  ])('aborts at remaining budget, including body consumption (%s)', async (bodyOnly) => {
+    const budget = startBudget(CURATION_BUDGET_MS - 1000);
+    const { mock, signals } = stalledFetch(bodyOnly);
+    const result = expect(
+      enrichWithLLM('secret', BASE_URL, MODEL, story, budget),
+    ).rejects.toBeInstanceOf(CurationBudgetError);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(signals[0]!.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await result;
+    expect(signals[0]!.aborted).toBe(true);
+    expect(mock).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('retains both measured attempt timeouts and the 500ms retry delay', async () => {
+    const budget = startBudget();
+    const { mock, signals } = stalledFetch();
+    const result = expect(
+      enrichWithLLM('secret', BASE_URL, MODEL, story, budget),
+    ).rejects.toBeInstanceOf(CuratorTimeoutError);
+    await vi.advanceTimersByTimeAsync(150_000);
+    expect(signals[0]!.aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(499);
+    expect(mock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(mock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(164_999);
+    expect(signals[1]!.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await result;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('clamps the retry to the same deadline rather than resetting its budget', async () => {
+    const budget = startBudget(CURATION_BUDGET_MS - 151_500);
+    const { mock, signals } = stalledFetch();
+    const result = expect(
+      enrichWithLLM('secret', BASE_URL, MODEL, story, budget),
+    ).rejects.toBeInstanceOf(CurationBudgetError);
+    await vi.advanceTimersByTimeAsync(150_500);
+    expect(mock).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1000);
+    await result;
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('starts neither requests nor backoff when the remaining time cannot fit them', async () => {
+    const budget = startBudget(CURATION_BUDGET_MS - 500);
+    const mock = vi.fn(async () => new Response('invalid JSON'));
+    vi.stubGlobal('fetch', mock);
+    await expect(enrichWithLLM('secret', BASE_URL, MODEL, story, budget)).rejects.toBeInstanceOf(
+      CurationBudgetError,
+    );
+    expect(mock).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+    vi.setSystemTime(CURATION_BUDGET_MS);
+    await expect(enrichWithLLM('secret', BASE_URL, MODEL, story, budget)).rejects.toBeInstanceOf(
+      CurationBudgetError,
+    );
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps ordinary invalid JSON distinct and success/retry timing unchanged', async () => {
+    const budget = startBudget();
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('invalid JSON'))
+      .mockResolvedValueOnce(openAIResponse(enrichment));
+    vi.stubGlobal('fetch', mock);
+    const result = enrichWithLLM('secret', BASE_URL, MODEL, story, budget);
+    await vi.advanceTimersByTimeAsync(499);
+    expect(mock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(result).resolves.toEqual(enrichment);
+    expect(mock).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+
+    mock.mockImplementation(async () => new Response('invalid JSON'));
+    const invalid = expect(
+      enrichWithLLM('secret', BASE_URL, MODEL, story, budget),
+    ).rejects.toBeInstanceOf(SyntaxError);
+    await vi.advanceTimersByTimeAsync(500);
+    await invalid;
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 

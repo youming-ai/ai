@@ -1,56 +1,31 @@
 import type { Env } from '../data/api';
-import { applyEnrichment, markCurationSkipped } from './enrich';
 import {
+  CURATION_BATCH_SIZE,
+  CURATION_LEASE_MS,
+  CURATION_LIMIT,
+  CurationBudget,
+  CurationBudgetError,
   CuratorTimeoutError,
+  MAX_CURATION_ATTEMPTS,
   MIN_CURATOR_TEXT_CHARS,
-  type CuratorArticle,
-  enrichBatchWithLLM,
-  enrichWithLLM,
-} from './llm';
+} from './curationPolicy';
+import { applyEnrichment, markCurationSkipped } from './enrich';
+import { type CuratorArticle, enrichBatchWithLLM, enrichWithLLM } from './llm';
+
+// Preserve existing health/test imports; the policy module is the source of truth.
+export {
+  CURATION_BATCH_SIZE,
+  CURATION_LEASE_MS,
+  CURATION_LIMIT,
+  MAX_CURATION_ATTEMPTS,
+} from './curationPolicy';
+
 import type { ArticleEnrichment } from './types';
 
 // The curator: what turns a stored row into a publishable story. Split out of
 // ingest on purpose — ingest answers "what arrived", this answers "what is it",
 // and the two fail independently: a model outage must not stop the desk from
 // collecting, and a feed outage must not spend model budget re-judging nothing.
-
-/** Stories one tick may curate. Set from measured latency, and it is the dial
- *  that bounds the tick's *tail*, not its average.
- *
- *  The typical tick is one model call: mimo-v2.6-flash measures 25s for a single
- *  story and 56–130s for a batch of eight, so a healthy tick is one to two
- *  minutes plus the ingest that runs first (measured: 93s, 218s, 394s).
- *
- *  The tail is a batch whose reply fails validation — one story's summary over
- *  the 280-character limit rejects the whole batch — after which the curator
- *  falls back to one call per story. That is the tick that measured 394s. Since
- *  the fallback costs `CURATION_LIMIT × per-story latency`, this number *is* the
- *  worst-case bound. The alternative, dropping the fallback, would trade a long
- *  tick for a batch that can never recover from a single bad story.
- *
- *  Four per tick is ~380 stories/day against the ~180 the feeds deliver. A
- *  backlog drains in hours rather than minutes — visible as
- *  `checks.curation.pending`, which is the reason that field exists. */
-export const CURATION_LIMIT = 4;
-
-/** Batch size. Bigger is more efficient per story on this model (25s for one,
- *  16s each for eight), so this is not the dial to turn down when a tick gets
- *  long — `CURATION_LIMIT` is. */
-export const CURATION_BATCH_SIZE = 8;
-
-/** How many times a story may be attempted before the curator stops picking it up.
- *
- *  Without a cap a permanently unjudgeable story (a feed that returns 200 with a
- *  truncated body, say) would be retried every 15 minutes forever, spending a
- *  model call each time and never leaving the queue. The count is of claims in
- *  `agent_runs` (see `claim`), so the cap is durable across ticks and isolates,
- *  and an attempt is spent even when the invocation dies before its outcome. */
-export const MAX_CURATION_ATTEMPTS = 3;
-
-/** How long a claim keeps other invocations off a story. Longer than the 15-minute
- *  wall-clock limit Cloudflare puts on a scheduled invocation, so a claim can
- *  never lapse while its holder is still alive — only after it was killed. */
-export const CURATION_LEASE_MS = 20 * 60_000;
 
 /** A story some invocation may take now: still uncurated, under the attempt cap,
  *  and not held by a live claim. Correlated on `a.id` so both lookups ride the
@@ -194,14 +169,15 @@ async function curateBatch(
   baseUrl: string,
   model: string,
   batch: PendingArticle[],
+  budget: CurationBudget,
 ): Promise<Outcome[]> {
   try {
-    const enrichments = await enrichBatchWithLLM(apiKey, baseUrl, model, batch);
+    const enrichments = await enrichBatchWithLLM(apiKey, baseUrl, model, batch, budget);
     return batch.map((article, index) => ({ article, enrichment: enrichments[index] }));
   } catch (batchError) {
     const message = batchError instanceof Error ? batchError.message : String(batchError);
-    if (batchError instanceof CuratorTimeoutError) {
-      console.warn(`[curate] batch of ${batch.length} timed out; leaving it for the next tick`);
+    if (batchError instanceof CuratorTimeoutError || batchError instanceof CurationBudgetError) {
+      console.warn(`[curate] batch of ${batch.length}: ${message}; leaving it for the next tick`);
       return batch.map((article) => ({ article, error: message }));
     }
     console.warn(`[curate] batch of ${batch.length} failed, retrying story by story:`, message);
@@ -209,8 +185,17 @@ async function curateBatch(
 
   const outcomes: Outcome[] = [];
   for (const article of batch) {
+    // Every story already participated in the batch, so retain its claim and
+    // audit a failure even when its individual fallback cannot start.
+    if (budget.exhausted) {
+      outcomes.push({ article, error: new CurationBudgetError().message });
+      continue;
+    }
     try {
-      outcomes.push({ article, enrichment: await enrichWithLLM(apiKey, baseUrl, model, article) });
+      outcomes.push({
+        article,
+        enrichment: await enrichWithLLM(apiKey, baseUrl, model, article, budget),
+      });
     } catch (error) {
       outcomes.push({
         article,
@@ -250,19 +235,17 @@ export async function curatePending(env: Env): Promise<CurationReport> {
   // behaviour and says so in the report.
   if (!report.configured) return report;
 
-  const now = Date.now();
-  const pending: PendingArticle[] = [];
-  for (const candidate of await pendingArticles(env, CURATION_LIMIT, now)) {
-    if (await claim(env, candidate, model, now)) pending.push(candidate);
-  }
-  report.selected = pending.length;
-  if (pending.length === 0) return report;
-
+  const budget = new CurationBudget();
+  const candidates = await pendingArticles(env, CURATION_LIMIT, Date.now());
   const [judgeable, thin] = partition(
-    pending,
+    candidates,
     (article) => article.description.trim().length >= MIN_CURATOR_TEXT_CHARS,
   );
   for (const article of thin) {
+    if (budget.exhausted) break;
+    if (!(await claim(env, article, model, Date.now()))) continue;
+    report.selected += 1;
+    // Finish an acquired skip atomically even if the claim consumed the budget.
     try {
       await markCurationSkipped(
         env,
@@ -277,8 +260,20 @@ export async function curatePending(env: Env): Promise<CurationReport> {
   }
 
   for (let offset = 0; offset < judgeable.length; offset += CURATION_BATCH_SIZE) {
-    const batch = judgeable.slice(offset, offset + CURATION_BATCH_SIZE);
-    for (const outcome of await curateBatch(apiKey, baseUrl, model, batch)) {
+    if (budget.exhausted) break;
+    // Claim just this batch, not later work that may never start. Do not unclaim:
+    // a claim acquired as the deadline passes still spends an attempt and gets
+    // a failed outcome below, with no model request and no article mutation.
+    const batch: PendingArticle[] = [];
+    for (const article of judgeable.slice(offset, offset + CURATION_BATCH_SIZE)) {
+      if (budget.exhausted) break;
+      if (await claim(env, article, model, Date.now())) {
+        batch.push(article);
+        report.selected += 1;
+      }
+    }
+    if (batch.length === 0) continue;
+    for (const outcome of await curateBatch(apiKey, baseUrl, model, batch, budget)) {
       const { article, enrichment, error } = outcome;
       if (!enrichment) {
         report.failed += 1;
