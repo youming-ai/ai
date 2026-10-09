@@ -101,6 +101,7 @@ export async function applyEnrichment(
   env: Env,
   articleId: string,
   enrichment: ArticleEnrichment,
+  outcome: D1PreparedStatement,
 ): Promise<void> {
   const category = canonicalCategory(enrichment.category);
   const tags = [
@@ -136,6 +137,9 @@ export async function applyEnrichment(
         tag,
       ),
     ),
+    // D1 batches roll back the whole sequence if any statement fails, including
+    // this outcome: a story cannot leave the queue without its audit record.
+    outcome,
   ]);
 }
 
@@ -143,9 +147,18 @@ export async function applyEnrichment(
  *  for the model to work with. `enriched_at` is still set, otherwise the story
  *  would be re-selected every tick and counted as pending forever; it keeps the
  *  deck `storeArticle` wrote from the feed teaser. */
-export async function markCurationSkipped(env: Env, articleId: string): Promise<void> {
+export async function markCurationSkipped(
+  env: Env,
+  articleId: string,
+  outcome: D1PreparedStatement,
+): Promise<void> {
   const now = Date.now();
-  await env.DB.prepare('UPDATE articles SET enriched_at = ?, updated_at = ? WHERE id = ?')
-    .bind(now, now, articleId)
-    .run();
+  await env.DB.batch([
+    env.DB.prepare('UPDATE articles SET enriched_at = ?, updated_at = ? WHERE id = ?').bind(
+      now,
+      now,
+      articleId,
+    ),
+    outcome,
+  ]);
 }

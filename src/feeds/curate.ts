@@ -146,34 +146,31 @@ async function claim(env: Env, article: PendingArticle, model: string, now: numb
   return (result.meta?.changes ?? 0) > 0;
 }
 
-/** Append to the run log. One row per story per outcome, beside the claim
- *  that started it — which is what makes "did the AI run, and what happened to
- *  this story" answerable from D1 rather than from logs that have aged out. */
-async function recordRun(
+/** Prepare an outcome beside its claim. Successful completion batches this
+ *  with the article write; failures run it separately and leave the row pending. */
+function prepareRun(
   env: Env,
   article: PendingArticle,
   status: RunStatus,
   model: string,
   error: string,
-): Promise<void> {
+): D1PreparedStatement {
   const now = Date.now();
-  await env.DB.prepare(
+  return env.DB.prepare(
     `INSERT INTO agent_runs (
        id, article_fingerprint, source_id, status, model, article_id, error, started_at, finished_at
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  )
-    .bind(
-      crypto.randomUUID(),
-      article.id,
-      article.sourceId,
-      status,
-      model,
-      article.id,
-      error.slice(0, 500),
-      now,
-      now,
-    )
-    .run();
+  ).bind(
+    crypto.randomUUID(),
+    article.id,
+    article.sourceId,
+    status,
+    model,
+    article.id,
+    error.slice(0, 500),
+    now,
+    now,
+  );
 }
 
 interface Outcome {
@@ -267,8 +264,11 @@ export async function curatePending(env: Env): Promise<CurationReport> {
   );
   for (const article of thin) {
     try {
-      await markCurationSkipped(env, article.id);
-      await recordRun(env, article, 'skipped', model, 'too little text to curate');
+      await markCurationSkipped(
+        env,
+        article.id,
+        prepareRun(env, article, 'skipped', model, 'too little text to curate'),
+      );
       report.skipped += 1;
     } catch (error) {
       console.error(`[curate] ${article.id} skip write failed:`, error);
@@ -283,13 +283,17 @@ export async function curatePending(env: Env): Promise<CurationReport> {
       if (!enrichment) {
         report.failed += 1;
         console.error(`[curate] ${article.id} failed:`, error);
-        await recordRun(env, article, 'failed', model, error ?? 'unknown error');
+        await prepareRun(env, article, 'failed', model, error ?? 'unknown error').run();
         continue;
       }
       try {
-        await applyEnrichment(env, article.id, enrichment);
         const status: RunStatus = enrichment.isOnTopic ? 'stored' : 'filtered';
-        await recordRun(env, article, status, model, '');
+        await applyEnrichment(
+          env,
+          article.id,
+          enrichment,
+          prepareRun(env, article, status, model, ''),
+        );
         if (enrichment.isOnTopic) report.curated += 1;
         else report.filtered += 1;
       } catch (writeError) {
@@ -297,13 +301,13 @@ export async function curatePending(env: Env): Promise<CurationReport> {
         // the next tick retries it; the claim already counted this attempt.
         report.failed += 1;
         console.error(`[curate] ${article.id} write failed:`, writeError);
-        await recordRun(
+        await prepareRun(
           env,
           article,
           'failed',
           model,
           writeError instanceof Error ? writeError.message : String(writeError),
-        );
+        ).run();
       }
     }
   }
