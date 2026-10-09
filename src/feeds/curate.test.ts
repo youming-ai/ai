@@ -2,9 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../data/api';
 import {
   CURATION_BATCH_SIZE,
+  CURATION_LEASE_MS,
   CURATION_LIMIT,
-  MAX_CURATION_ATTEMPTS,
   curatePending,
+  MAX_CURATION_ATTEMPTS,
   pendingCurationCount,
 } from './curate';
 import { MIN_CURATOR_TEXT_CHARS } from './llm';
@@ -32,9 +33,16 @@ interface Statement {
   params: unknown[];
 }
 
+const isClaim = (statement: Statement) => statement.sql.includes("'processing'");
+/** An outcome row (stored/filtered/skipped/failed), as opposed to a claim. */
+const isOutcome = (statement: Statement) =>
+  statement.sql.includes('INSERT INTO agent_runs') && !isClaim(statement);
+
 /** The D1 surface the curator touches: the queue read, per-statement run()
- *  (run log, skip marker), and batch() (the article update plus its tag rows). */
-function curateDb(rows: Record<string, unknown>[]) {
+ *  (claims, run log, skip marker), and batch() (the article update plus its tag
+ *  rows). `wins` decides each claim, keyed by article id — the claim binds the id
+ *  fourth — so a race another invocation won can be modelled. */
+function curateDb(rows: Record<string, unknown>[], wins: (id: unknown) => boolean = () => true) {
   const ran: Statement[] = [];
   const batched: Statement[][] = [];
   const bound: Statement[] = [];
@@ -48,7 +56,8 @@ function curateDb(rows: Record<string, unknown>[]) {
       }),
       run: async () => {
         ran.push({ sql, params });
-        return { meta: { changes: 1 } };
+        const won = !isClaim({ sql, params }) || wins(params[3]);
+        return { meta: { changes: won ? 1 : 0 } };
       },
       first: async () => ({ pending: rows.length }),
     });
@@ -155,18 +164,80 @@ describe('curatePending', () => {
     expect(batched).toHaveLength(0);
   });
 
-  it('reads the queue with the attempt cap and the per-tick limit bound', async () => {
+  it('reads the queue with the attempt cap, the lease and the per-tick limit bound', async () => {
     const { db, bound } = curateDb([]);
+    const before = Date.now();
     await curatePending(envWith(db));
 
     const queue = bound[0]!;
     expect(queue.sql).toContain('a.enriched_at IS NULL');
     expect(queue.sql).toContain("a.status = 'published'");
     expect(queue.sql).toContain('ORDER BY a.published_at DESC');
-    // The failure tally is what stops a permanently unjudgeable story from
-    // spending a model call every 15 minutes forever.
-    expect(queue.sql).toContain("status = 'failed'");
-    expect(queue.params).toEqual([MAX_CURATION_ATTEMPTS, CURATION_LIMIT]);
+    // The attempt tally is what stops a permanently unjudgeable story from
+    // spending a model call every 15 minutes forever; it counts claims.
+    expect(queue.sql).toContain("r.status = 'processing'");
+    expect(queue.params[0]).toBe(MAX_CURATION_ATTEMPTS);
+    expect(queue.params[1]).toBeGreaterThanOrEqual(before - CURATION_LEASE_MS);
+    expect(queue.params[1]).toBeLessThanOrEqual(Date.now() - CURATION_LEASE_MS);
+    expect(queue.params[2]).toBe(CURATION_LIMIT);
+  });
+
+  it('claims a story before calling the model, so a killed tick still spends the attempt', async () => {
+    // Outcomes are written after the model answers. A scheduled invocation the
+    // platform kills (15-minute wall clock) mid-batch writes none, so if only
+    // outcomes counted, the same story would be re-selected every tick forever.
+    const { db, ran } = curateDb([pendingRow()]);
+    const claimsAtCall: number[] = [];
+    const answer = stubLlm();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: { body: string }) => {
+        claimsAtCall.push(ran.filter(isClaim).length);
+        return (answer as unknown as (u: string, i: { body: string }) => Promise<Response>)(
+          url,
+          init,
+        );
+      }),
+    );
+
+    await curatePending(envWith(db));
+
+    expect(claimsAtCall).toEqual([1]);
+    const claim = ran.find(isClaim)!;
+    expect(claim.sql).toContain('INSERT INTO agent_runs');
+    // Re-checked inside the INSERT, not trusted from the earlier SELECT: that is
+    // what makes the claim atomic against a concurrent invocation.
+    expect(claim.sql).toContain('a.enriched_at IS NULL');
+    expect(claim.params.slice(1, 5)).toEqual([
+      'test-model',
+      expect.any(Number),
+      'fp-1',
+      MAX_CURATION_ATTEMPTS,
+    ]);
+    expect(claim.params[5]).toBe((claim.params[2] as number) - CURATION_LEASE_MS);
+  });
+
+  it('leaves a story another invocation claimed first', async () => {
+    // Measured in production before claims existed: 21% of runs were a second,
+    // concurrent judgement of the same story, and 8 stories ended with a
+    // 'filtered' run on a row the later writer had published.
+    const { db, ran, batched } = curateDb(
+      [
+        pendingRow(),
+        pendingRow({ id: 'fp-2', title: 'Second story', url: 'https://example.com/2' }),
+      ],
+      (id) => id !== 'fp-1',
+    );
+    const fetchMock = stubLlm();
+
+    const report = await curatePending(envWith(db));
+
+    expect(report).toMatchObject({ selected: 1, curated: 1, failed: 0 });
+    const prompt = JSON.parse(fetchMock.mock.calls[0]![1].body).messages[0].content as string;
+    expect(prompt).toContain('Second story');
+    expect(prompt).not.toContain('HBM4 pricing climbs');
+    expect(batched).toHaveLength(1);
+    expect(ran.filter(isOutcome).map((statement) => statement.params[1])).toEqual(['fp-2']);
   });
 
   it('writes an on-beat story back and logs a stored run', async () => {
@@ -201,7 +272,7 @@ describe('curatePending', () => {
       .map((statement) => statement.params[1]);
     expect(tagRows).toEqual(['hbm', 'supply']);
 
-    const run = ran.find((statement) => statement.sql.includes('INSERT INTO agent_runs'))!;
+    const run = ran.find(isOutcome)!;
     expect(run.params).toContain('stored');
     expect(run.params).toContain('test-model');
     // article_fingerprint and article_id are both the article id, because
@@ -239,9 +310,7 @@ describe('curatePending', () => {
     expect(update.params[5]).toBe(0);
     expect(update.params[6]).toBe('filtered');
     expect(update.params[3]).toBeNull();
-    expect(
-      ran.find((statement) => statement.sql.includes('INSERT INTO agent_runs'))!.params,
-    ).toContain('filtered');
+    expect(ran.find(isOutcome)!.params).toContain('filtered');
   });
 
   it('skips a story with too little text without spending a call', async () => {
@@ -261,9 +330,7 @@ describe('curatePending', () => {
       statement.sql.includes('UPDATE articles SET enriched_at'),
     )!;
     expect(skip.params[2]).toBe('fp-1');
-    expect(
-      ran.find((statement) => statement.sql.includes('INSERT INTO agent_runs'))!.params,
-    ).toContain('skipped');
+    expect(ran.find(isOutcome)!.params).toContain('skipped');
   });
 
   it('falls back to one call per story when the batch is rejected', async () => {
@@ -290,9 +357,7 @@ describe('curatePending', () => {
     // 2 rejected batch attempts + 1 single success + 2 attempts for the story
     // that never answers.
     expect(fetchMock).toHaveBeenCalledTimes(5);
-    const statuses = ran
-      .filter((statement) => statement.sql.includes('INSERT INTO agent_runs'))
-      .map((statement) => statement.params[3]);
+    const statuses = ran.filter(isOutcome).map((statement) => statement.params[3]);
     expect(statuses.sort()).toEqual(['failed', 'stored']);
   });
 
@@ -317,16 +382,14 @@ describe('curatePending', () => {
     // One batch attempt plus one retry — not 1 + 2 per story.
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(report).toMatchObject({ selected: 2, curated: 0, failed: 2 });
-    const statuses = ran
-      .filter((statement) => statement.sql.includes('INSERT INTO agent_runs'))
-      .map((statement) => statement.params[3]);
+    const statuses = ran.filter(isOutcome).map((statement) => statement.params[3]);
     expect(statuses).toEqual(['failed', 'failed']);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('timed out'));
   });
 
   it('records a failure when the article write fails, leaving it in the queue', async () => {
     // enriched_at stays NULL on a write failure, so the next tick retries; the
-    // failed run is what counts toward the attempt cap so it cannot retry forever.
+    // claim already counted the attempt, so it cannot retry forever.
     const { db, ran } = curateDb([pendingRow()]);
     (db as unknown as { batch: unknown }).batch = vi.fn(async () => {
       throw new Error('D1 write failed');
@@ -337,7 +400,7 @@ describe('curatePending', () => {
     const report = await curatePending(envWith(db));
 
     expect(report).toMatchObject({ curated: 0, failed: 1 });
-    const run = ran.find((statement) => statement.sql.includes('INSERT INTO agent_runs'))!;
+    const run = ran.find(isOutcome)!;
     expect(run.params[3]).toBe('failed');
     expect(run.params[6]).toContain('D1 write failed');
     expect(error).toHaveBeenCalled();
