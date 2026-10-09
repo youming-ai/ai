@@ -1,0 +1,35 @@
+---
+import { env } from 'cloudflare:workers';
+import { getExploreFeed, getExploreFilters } from '../../data/api';
+import ExploreView from './ExploreView';
+
+interface Props {
+  title: string;
+  /** Validated by the category route before this module fetches anything. */
+  category?: string;
+}
+
+const { title, category } = Astro.props;
+const ctx = Astro.locals.cfContext;
+const [initialData, initialFilters] = await Promise.all([
+  getExploreFeed(category ? { category } : {}, env, ctx),
+  getExploreFilters(env, ctx),
+]);
+// The layout toggle is a link: SSR and appended pages share the URL's choice.
+const initialView = Astro.url.searchParams.get('view') === 'list' ? 'list' : 'grid';
+---
+<a
+  href="#explore-results"
+  class="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-control focus:bg-panel focus:px-3 focus:py-2 ds-caption"
+>
+  Skip to links
+</a>
+<main>
+  <h1 class="sr-only">{title}</h1>
+  <ExploreView
+    initialData={initialData}
+    initialFilters={initialFilters}
+    initialCategory={category}
+    initialView={initialView}
+  />
+</main>
