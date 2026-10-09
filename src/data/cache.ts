@@ -8,7 +8,7 @@ interface Entry {
 
 type CacheState = 'HIT' | 'MISS' | 'REVALIDATED' | 'STALE';
 
-interface CachedResult {
+export interface CachedResult {
   body: string;
   status: number;
   cache: CacheState;
@@ -30,7 +30,7 @@ export async function runCached(
   keep: number,
   env: Env,
   ctx: ExecutionContext,
-): Promise<Response> {
+): Promise<CachedResult> {
   let stored: Entry | null = null;
   try {
     stored = await env.CACHE.get<Entry>(cacheKey, 'json');
@@ -40,14 +40,11 @@ export async function runCached(
   const now = Date.now();
 
   if (stored && now - stored.at < fresh * 1000) {
-    return json(stored.body, 200, 'HIT');
+    return { body: stored.body, status: 200, cache: 'HIT' };
   }
 
   const pending = inflight.get(cacheKey);
-  if (pending) {
-    const result = await pending;
-    return json(result.body, result.status, result.cache);
-  }
+  if (pending) return pending;
 
   const promise = (async (): Promise<CachedResult> => {
     try {
@@ -82,6 +79,5 @@ export async function runCached(
   })();
 
   inflight.set(cacheKey, promise);
-  const result = await promise;
-  return json(result.body, result.status, result.cache);
+  return promise;
 }

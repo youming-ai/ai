@@ -24,7 +24,7 @@ export interface SitemapData {
  *  is not. */
 export async function getSitemapNews(env: Env, ctx: ExecutionContext): Promise<SitemapData> {
   try {
-    const response = await runCached(
+    const result = await runCached(
       'sitemap:news:v3',
       async () => {
         if (!env.DB) throw new Error('D1 binding is required');
@@ -42,8 +42,8 @@ export async function getSitemapNews(env: Env, ctx: ExecutionContext): Promise<S
       env,
       ctx,
     );
-    if (!response.ok) return { hubs: [], unavailable: true };
-    const raw = (await response.json()) as { hubs: CountRow[] };
+    if (result.status < 200 || result.status >= 300) return { hubs: [], unavailable: true };
+    const raw = JSON.parse(result.body) as { hubs: CountRow[] };
     const hubs: SitemapNewsHub[] = raw.hubs
       .map((row) => ({ category: rowString(row.value), newest: rowNumber(row.count) }))
       .filter((row) => Object.hasOwn(CATEGORIES, row.category) && row.newest > 0)

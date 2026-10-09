@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from './api';
 import { getExploreFeed } from './api';
 
-// getExploreFeed re-parses the JSON that serveExplore cached, so its type
+// getExploreFeed parses the neutral cache result's JSON, so its type
 // guards have to track ExploreFeed. They did not: nextCursor became a keyset
 // string in the keyset-pagination change while this still tested for a number,
 // which silently coerced every server-rendered page to nextCursor: null. The

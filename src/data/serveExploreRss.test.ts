@@ -20,10 +20,13 @@ function mockCtx(): ExecutionContext {
 /** D1 stub that records the LIMIT binding the explore query asks for and
  *  returns no rows. `failing` makes every statement throw, standing in for a
  *  D1 outage with nothing stored in KV. */
-function mockEnv(options: { failing?: boolean } = {}): { env: Env; bindings: unknown[][] } {
+function mockEnv(options: { failing?: boolean; stored?: { body: string; at: number } } = {}): {
+  env: Env;
+  bindings: unknown[][];
+} {
   const bindings: unknown[][] = [];
   const env = {
-    CACHE: { get: vi.fn(async () => null), put: vi.fn(async () => {}) },
+    CACHE: { get: vi.fn(async () => options.stored ?? null), put: vi.fn(async () => {}) },
     DB: {
       prepare: vi.fn(() => ({
         bind: vi.fn(function bind(this: unknown, ...args: unknown[]) {
@@ -88,6 +91,24 @@ describe('serveExploreRss', () => {
     expect(res.status).toBe(502);
     expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8');
     expect(res.headers.get('cache-control')).toBeNull();
+    expect(res.headers.get('x-cache')).toBe('MISS');
+    expect(await res.json()).toEqual({ error: 'upstream unavailable' });
+  });
+
+  it.each([
+    'HIT',
+    'STALE',
+  ] as const)('serves a %s cached XML document with RSS headers', async (cache) => {
+    const { env } = mockEnv({
+      failing: true,
+      stored: { body: '<rss/>', at: cache === 'HIT' ? Date.now() : 0 },
+    });
+    const res = await serveExploreRss({}, env, mockCtx());
+    expect(res.status).toBe(200);
+    expect(res.headers.get('x-cache')).toBe(cache);
+    expect(res.headers.get('content-type')).toBe('application/rss+xml; charset=utf-8');
+    expect(res.headers.get('cache-control')).toBe('public, max-age=300');
+    expect(await res.text()).toBe('<rss/>');
   });
 
   // A feed poll should carry more than the web default, and the clamp in
