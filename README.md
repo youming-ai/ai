@@ -1,4 +1,4 @@
-# umuo
+# AI hardware desk
 
 > AI-hardware desk on Cloudflare Workers. A cron pulls a registry of hardware and AI-industry RSS feeds into D1, a model curates every new story (category, tags, summary, blurb, quality score, on-beat gate), and Astro renders the result as a fast masonry board with category hubs and RSS feeds.
 
@@ -64,7 +64,7 @@ All knobs are code, not env spaghetti. Edit one file per concern:
 | Concern | File | Notes |
 |---------|------|-------|
 | Branding / origin | `src/site.ts` | `SITE_ORIGIN`, `SITE_NAME`, `SITE_TITLE`, `SITE_DESCRIPTION` |
-| Icons / social card | `public/favicon.svg`, `public/og.svg` | Edit the SVG, then rasterize `og.svg` to `og.png` (the default `og:image`) |
+| Icons / social card | `scripts/brand-mark.ts` → `public/logo.svg`, `public/favicon.svg`, `public/og.svg` | The SVGs are generated (the impossible-triangle mark is computed, not drawn): change the script, run `bun scripts/brand-mark.ts`, then rasterize `og.svg` to `og.png` (the default `og:image`) with `sips` |
 | Taxonomy | `src/categories.ts` | `CATEGORIES` — keys become `/:category` routes. The `hardware` group is also what the classifier prompt is built from |
 | Sources | `src/feeds/sources.ts` | The 12 feeds, in authority order (which is also the cross-source dedupe precedence), each with a per-tick `maxItems` cap; `INGEST_MAX_AGE_MS` is the freshness window |
 | Curator | `src/feeds/llm.ts`, `src/feeds/curate.ts` | The prompt and the validators, `CURATION_LIMIT` (per tick), `CURATION_BATCH_SIZE`, `MAX_CURATION_ATTEMPTS` |

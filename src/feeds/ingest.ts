@@ -1,5 +1,5 @@
 import type { Env } from '../data/api';
-import { SITE_NAME, SITE_ORIGIN } from '../site';
+import { SITE_ORIGIN } from '../site';
 import { sleep } from '../utils/coerce';
 import { canonicalCategory, normalizeTitle, storeArticle } from './enrich';
 import { parseRss } from './rss';
@@ -12,10 +12,13 @@ const KNOWN_COLUMN_CHUNK = 90;
 
 // The publisher sees this, so it names the site the reader would reach and the
 // origin comes from the one constant that defines it — the previous literal
-// spelled the template's name next to this deployment's domain.
+// spelled the template's name next to this deployment's domain. The product
+// token is the host, not SITE_NAME: a token cannot hold the name's spaces.
+// Measured when it changed from `umuo/1.0`: all 12 sources answered the new
+// string with the same status and item count as the old one.
 const RSS_HEADERS = {
   accept: 'application/rss+xml, application/atom+xml, application/json, text/xml, */*',
-  'user-agent': `${SITE_NAME}/1.0 (+${SITE_ORIGIN})`,
+  'user-agent': `${new URL(SITE_ORIGIN).host}/1.0 (+${SITE_ORIGIN})`,
 };
 
 export function canonicalizeUrl(value: string): string {

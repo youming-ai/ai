@@ -5,9 +5,10 @@ export const SITE_ORIGIN = 'https://umuo.app';
 
 // Brand-facing copy. Single source of truth: the layout <title>/description
 // defaults and the RSS channel description import from here, so a rebrand
-// or positioning change edits one file, not three.
-export const SITE_NAME = 'umuo';
-export const SITE_TITLE = 'umuo — AI hardware desk';
+// or positioning change edits one file, not three. The desk has no brand name
+// of its own any more, so its name is what it is.
+export const SITE_NAME = 'AI hardware desk';
+export const SITE_TITLE = SITE_NAME;
 export const SITE_DESCRIPTION =
   'Accelerators, processors, servers, memory and the datacenter build-out behind AI — collected from the hardware press and curated by model.';
 

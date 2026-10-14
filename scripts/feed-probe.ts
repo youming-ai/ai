@@ -16,12 +16,12 @@
 // publishing is visible here and not only in production logs.
 import { parseRss } from '../src/feeds/rss';
 import { FEED_SOURCES, INGEST_MAX_AGE_MS } from '../src/feeds/sources';
-import { SITE_NAME, SITE_ORIGIN } from '../src/site';
 import type { FeedSource } from '../src/feeds/types';
+import { SITE_ORIGIN } from '../src/site';
 
 const RSS_HEADERS = {
   accept: 'application/rss+xml, application/atom+xml, application/json, text/xml, */*',
-  'user-agent': `${SITE_NAME}/1.0 (+${SITE_ORIGIN})`,
+  'user-agent': `${new URL(SITE_ORIGIN).host}/1.0 (+${SITE_ORIGIN})`,
 };
 
 interface Probe {
