@@ -43,7 +43,7 @@ binding = "DB"
 database_name = "ai-desk-content"
 # Required for remote deploys — database_name alone does not resolve.
 # Primary region is APAC; D1 cannot be moved without recreating it.
-database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"  # TODO: wrangler d1 create news-desk-content
+database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"  # TODO: wrangler d1 create ai-desk-content
 migrations_dir = "migrations"
 
 # No durable_objects/migrations here on purpose. A pending DO migration cannot

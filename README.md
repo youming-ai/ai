@@ -36,7 +36,9 @@ Astro 7, server-rendered with no UI framework · Cloudflare Workers (workerd) ·
 git clone https://github.com/youming-ai/ai my-desk && cd my-desk
 bun install
 
-# One-time Cloudflare setup:
+# One-time Cloudflare setup. The committed wrangler.toml is this deployment's
+# own config; start yours from the template, whose names match these commands:
+cp wrangler.example.toml wrangler.toml
 bunx wrangler kv namespace create CACHE
 bunx wrangler d1 create ai-desk-content
 # → paste the returned ids into wrangler.toml
