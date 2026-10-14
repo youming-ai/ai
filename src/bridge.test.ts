@@ -69,7 +69,7 @@ const cfContext = {
 
 function call(path: string): Promise<Response> {
   return ALL({
-    request: new Request(`https://umuo.app${path}`),
+    request: new Request(`${SITE_ORIGIN}${path}`),
     locals: { cfContext },
   } as never) as Promise<Response>;
 }
@@ -98,7 +98,7 @@ describe('the /api/* bridge', () => {
 
   it('rejects a non-GET on the explore endpoint', async () => {
     const res = await ALL({
-      request: new Request('https://umuo.app/api/explore', { method: 'POST' }),
+      request: new Request(`${SITE_ORIGIN}/api/explore`, { method: 'POST' }),
       locals: { cfContext },
     } as never);
     expect((res as Response).status).toBe(405);
@@ -204,7 +204,7 @@ describe('the card fragment endpoint', () => {
   const get = async (path: string) => {
     const { GET } = await import('./pages/cards.json');
     return (await GET({
-      url: new URL(`https://umuo.app${path}`),
+      url: new URL(`${SITE_ORIGIN}${path}`),
       locals: { cfContext },
     } as never)) as Response;
   };

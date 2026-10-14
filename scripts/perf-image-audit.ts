@@ -13,13 +13,13 @@
 // Run: bun run perf:images   (needs the network; the feed is external)
 import { parseRss } from '../src/feeds/rss';
 import { FEED_SOURCES } from '../src/feeds/sources';
-import { SITE_NAME, SITE_ORIGIN } from '../src/site';
+import { CRAWLER_USER_AGENT } from '../src/site';
 
 // Mirrors the headers in src/feeds/ingest.ts, which are module-private there.
 // A different UA here would measure a different response than ingest gets.
 const HEADERS = {
   accept: 'application/rss+xml, application/atom+xml, application/json, text/xml, */*',
-  'user-agent': `${SITE_NAME}/1.0 (+${SITE_ORIGIN})`,
+  'user-agent': CRAWLER_USER_AGENT,
 };
 
 /** Content-Length for a URL, via a one-byte ranged GET.

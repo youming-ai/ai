@@ -1,6 +1,10 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Classes are looked for in src/ only, as v3's content glob did. Tailwind 4
+   would otherwise scan the whole repo, and design-tokens/tokens.json and the
+   docs name utilities in prose (px-page-x, shadow-panel…) that no page uses. */
+@import 'tailwindcss' source('../src');
+/* The theme still lives in tailwind.config.js: the tokens test reads its font
+   families, and every colour there is a channel triplet from this file. */
+@config '../tailwind.config.js';
 
 /* ── Self-hosted fonts ───────────────────────────────────────────────────────
    Was three families / nine weights from fonts.googleapis.com, behind a
@@ -52,15 +56,18 @@
 
 :root,
 [data-theme='dark'] {
-  /* Ink ground with a restrained pitch green signal. */
-  --c-bg: 10 14 12;
-  --c-surface: 26 34 30;
-  --c-surface2: 40 52 46;
-  --c-line: 48 64 56;
-  --c-text: 242 247 244;
-  --c-muted: 138 150 144;
+  /* Violet-ink ground with the brand violet as the signal. The neutrals keep
+     the lightness of the old green-ink set (so every contrast pair holds) with
+     the hue turned to the brand's. The accent is #5200ff mixed 1:1 with white:
+     #5200ff itself is ~2.6:1 on this ground, too dark for caption text. */
+  --c-bg: 12 12 18;
+  --c-surface: 31 30 42;
+  --c-surface2: 47 47 64;
+  --c-line: 57 57 80;
+  --c-text: 245 245 253;
+  --c-muted: 145 145 163;
 
-  --c-pitch: 46 213 115;
+  --c-pitch: 169 128 255;
   --c-live: 255 69 58;
   --c-amber: 251 191 36;
 
@@ -119,14 +126,14 @@
 }
 
 [data-theme='light'] {
-  --c-bg: 244 247 245;
+  --c-bg: 245 246 251;
   --c-surface: 255 255 255;
-  --c-surface2: 232 238 234;
-  --c-line: 200 210 205;
-  --c-text: 16 24 20;
-  --c-muted: 90 105 98;
+  --c-surface2: 235 235 245;
+  --c-line: 205 206 221;
+  --c-text: 21 20 32;
+  --c-muted: 98 99 120;
 
-  --c-pitch: 14 110 62; /* light #0e6e3e: AA (4.5:1) on page, card, and the 15% active rail-row fill; on-accent fill vs ink is ~3.1:1 (decorative labels — accepted tradeoff) */
+  --c-pitch: 82 0 255; /* light: the brand #5200ff itself — 6.9:1 on page, 7.3:1 on cards, 5.2:1 on the 15% active rail-row fill */
   --c-live: 198 43 38;
   --c-amber: 156 100 0; /* light: darkened for AA on white (5.05:1); /25 badge ~3.7:1 */
 
@@ -144,6 +151,13 @@
     @apply bg-night text-chalk font-body antialiased;
   }
 
+  /* Tailwind 4 resets buttons to the platform's default cursor; this board's
+     buttons (load more, the theme control) kept v3's pointer. */
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+
   :focus-visible {
     outline: 2px solid rgb(var(--c-pitch));
     outline-offset: 2px;
@@ -157,23 +171,7 @@
   .ds-segmented {
     @apply flex items-center gap-1 p-1 rounded-pill bg-panel/60 border border-line/20 select-none;
   }
-  /* Tactile press feedback for any pressable (buttons, tabs, cards). Scoped
-     transition (never `all`) covering hover colors + the press scale. */
-  .ds-press {
-    transition:
-      transform 150ms var(--ease-out),
-      color 150ms var(--ease-out),
-      background-color 150ms var(--ease-out),
-      border-color 150ms var(--ease-out),
-      box-shadow 150ms var(--ease-out),
-      opacity 150ms var(--ease-out),
-      filter 150ms var(--ease-out);
-  }
-  .ds-press:active {
-    transform: scale(0.97);
-  }
   @media (prefers-reduced-motion: reduce) {
-    .ds-press:active,
     .ds-seg-tab:active {
       transform: none;
     }
@@ -191,7 +189,7 @@
     transform: scale(0.97);
   }
   .ds-seg-tab-active {
-    @apply bg-overlay/10 text-chalk shadow-sm font-bold;
+    @apply bg-overlay/10 text-chalk shadow-xs font-bold;
   }
   .ds-seg-tab-inactive {
     @apply text-chalkdim hover:text-chalk;
@@ -263,6 +261,29 @@
   .ds-signal::after {
     width: var(--signal, 0%);
     background: rgb(var(--signal-accent, var(--c-pitch)));
+  }
+}
+
+/* Tactile press feedback for any pressable (buttons, tabs, cards). Scoped
+   transition (never `all`) covering hover colors + the press scale. A utility
+   rather than a component class because `.ds-btn-secondary` applies it, and
+   Tailwind 4 only lets @apply reach utilities. */
+@utility ds-press {
+  transition:
+    transform 150ms var(--ease-out),
+    color 150ms var(--ease-out),
+    background-color 150ms var(--ease-out),
+    border-color 150ms var(--ease-out),
+    box-shadow 150ms var(--ease-out),
+    opacity 150ms var(--ease-out),
+    filter 150ms var(--ease-out);
+  &:active {
+    transform: scale(0.97);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &:active {
+      transform: none;
+    }
   }
 }
 

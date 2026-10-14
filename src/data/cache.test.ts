@@ -70,25 +70,23 @@ describe('neutral cache results', () => {
     });
   });
 
-  it.each([
-    'get',
-    'put rejection',
-    'put throw',
-    'waitUntil',
-  ])('isolates %s failures', async (failure) => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    const { run, get, put, waitUntil } = harness();
-    const error = new Error('KV unavailable');
-    if (failure === 'get') get.mockRejectedValue(error);
-    if (failure === 'put rejection') put.mockRejectedValue(error);
-    if (failure === 'put throw')
-      put.mockImplementation(() => {
-        throw error;
-      });
-    if (failure === 'waitUntil')
-      waitUntil.mockImplementation(() => {
-        throw error;
-      });
-    expect(await run(async () => 'new')).toEqual({ body: 'new', status: 200, cache: 'MISS' });
-  });
+  it.each(['get', 'put rejection', 'put throw', 'waitUntil'])(
+    'isolates %s failures',
+    async (failure) => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { run, get, put, waitUntil } = harness();
+      const error = new Error('KV unavailable');
+      if (failure === 'get') get.mockRejectedValue(error);
+      if (failure === 'put rejection') put.mockRejectedValue(error);
+      if (failure === 'put throw')
+        put.mockImplementation(() => {
+          throw error;
+        });
+      if (failure === 'waitUntil')
+        waitUntil.mockImplementation(() => {
+          throw error;
+        });
+      expect(await run(async () => 'new')).toEqual({ body: 'new', status: 200, cache: 'MISS' });
+    },
+  );
 });

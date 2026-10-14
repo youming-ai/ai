@@ -1,14 +1,23 @@
-// The board's client-side behaviour — everything that used to be React.
+// The board's client-side behaviour.
 //
 // The script executes on import (it is a browser module, shipped by Astro as
-// one), so each test renders the real component tree, then imports the module
+// one), so each test renders the real board markup, then imports the module
 // fresh with `vi.resetModules()`. Rendering the actual `ExploreView` rather than
 // a hand-written fixture is deliberate: a fixture would drift from the markup
 // the script looks for, which is the failure this file exists to catch.
-import { fireEvent, render, waitFor } from '@testing-library/react';
+import { fireEvent, waitFor } from '@testing-library/dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ExploreArticle, ExploreFeed } from '../types';
 import ExploreView from '../components/explore/ExploreView';
+import type { Html } from '../components/html';
+import type { ExploreArticle, ExploreFeed } from '../types';
+
+/** Mounts the server-rendered board the way the browser receives it. */
+function render(markup: Html): { container: HTMLElement } {
+  const container = document.createElement('div');
+  container.innerHTML = markup.value;
+  document.body.appendChild(container);
+  return { container };
+}
 
 function card(id: string, title: string, isVideo = false): ExploreArticle {
   return {
@@ -150,11 +159,11 @@ describe('board appends the next page', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { container } = render(
-      <ExploreView
-        initialData={feed([card('a', 'first story')], 'cur-1')}
-        initialFilters={{ categories: [] }}
-        initialCategory="tools"
-      />,
+      ExploreView({
+        initialData: feed([card('a', 'first story')], 'cur-1'),
+        initialFilters: { categories: [] },
+        initialCategory: 'tools',
+      }),
     );
     await startBoard();
 
@@ -179,10 +188,10 @@ describe('board appends the next page', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { container } = render(
-      <ExploreView
-        initialData={feed([card('a', 'first story')], 'cur-1')}
-        initialFilters={{ categories: [] }}
-      />,
+      ExploreView({
+        initialData: feed([card('a', 'first story')], 'cur-1'),
+        initialFilters: { categories: [] },
+      }),
     );
     await startBoard();
 
@@ -204,11 +213,11 @@ describe('board appends the next page', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { container } = render(
-      <ExploreView
-        initialData={feed([card('a', 'first story')], 'cur-1')}
-        initialFilters={{ categories: [] }}
-        initialView="list"
-      />,
+      ExploreView({
+        initialData: feed([card('a', 'first story')], 'cur-1'),
+        initialFilters: { categories: [] },
+        initialView: 'list',
+      }),
     );
     await startBoard();
 
@@ -236,10 +245,10 @@ describe('board appends the next page', () => {
     );
 
     const { container } = render(
-      <ExploreView
-        initialData={feed([card('a', 'first story')], 'cur-1')}
-        initialFilters={{ categories: [] }}
-      />,
+      ExploreView({
+        initialData: feed([card('a', 'first story')], 'cur-1'),
+        initialFilters: { categories: [] },
+      }),
     );
     await startBoard();
 
@@ -274,10 +283,10 @@ describe('board appends the next page', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { container } = render(
-      <ExploreView
-        initialData={feed([card('a', 'first story')], 'cur-1')}
-        initialFilters={{ categories: [] }}
-      />,
+      ExploreView({
+        initialData: feed([card('a', 'first story')], 'cur-1'),
+        initialFilters: { categories: [] },
+      }),
     );
     await startBoard();
 
@@ -300,10 +309,10 @@ describe('board appends the next page', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('nope', { status: 502 })));
 
     const { container } = render(
-      <ExploreView
-        initialData={feed([card('a', 'first story')], 'cur-1')}
-        initialFilters={{ categories: [] }}
-      />,
+      ExploreView({
+        initialData: feed([card('a', 'first story')], 'cur-1'),
+        initialFilters: { categories: [] },
+      }),
     );
     await startBoard();
 
@@ -329,10 +338,10 @@ describe('board appends the next page', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { container } = render(
-      <ExploreView
-        initialData={feed([card('a', 'first story')], 'cur-1')}
-        initialFilters={{ categories: [] }}
-      />,
+      ExploreView({
+        initialData: feed([card('a', 'first story')], 'cur-1'),
+        initialFilters: { categories: [] },
+      }),
     );
     await startBoard();
 
@@ -349,10 +358,10 @@ describe('board appends the next page', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { container } = render(
-      <ExploreView
-        initialData={feed([card('a', 'only story')], null)}
-        initialFilters={{ categories: [] }}
-      />,
+      ExploreView({
+        initialData: feed([card('a', 'only story')], null),
+        initialFilters: { categories: [] },
+      }),
     );
     await startBoard();
 
@@ -365,10 +374,10 @@ describe('board appends the next page', () => {
 describe('theme', () => {
   it('applies the stored choice and keeps both rail instances in step', async () => {
     const { container } = render(
-      <ExploreView
-        initialData={feed([card('a', 'story')], null)}
-        initialFilters={{ categories: [] }}
-      />,
+      ExploreView({
+        initialData: feed([card('a', 'story')], null),
+        initialFilters: { categories: [] },
+      }),
     );
     await startBoard();
 
@@ -399,10 +408,10 @@ describe('theme', () => {
   it('adopts a persisted light theme on load', async () => {
     localStorage.setItem('theme', 'light');
     render(
-      <ExploreView
-        initialData={feed([card('a', 'story')], null)}
-        initialFilters={{ categories: [] }}
-      />,
+      ExploreView({
+        initialData: feed([card('a', 'story')], null),
+        initialFilters: { categories: [] },
+      }),
     );
     await startBoard();
 
@@ -419,10 +428,10 @@ describe('card media', () => {
     const { play } = stubPlayback();
 
     render(
-      <ExploreView
-        initialData={feed([card('v', 'launch film', true)], null)}
-        initialFilters={{ categories: [] }}
-      />,
+      ExploreView({
+        initialData: feed([card('v', 'launch film', true)], null),
+        initialFilters: { categories: [] },
+      }),
     );
     await startBoard();
 
@@ -434,10 +443,10 @@ describe('card media', () => {
     const { play, pause, load } = stubPlayback();
 
     const { container } = render(
-      <ExploreView
-        initialData={feed([card('v', 'launch film', true)], null)}
-        initialFilters={{ categories: [] }}
-      />,
+      ExploreView({
+        initialData: feed([card('v', 'launch film', true)], null),
+        initialFilters: { categories: [] },
+      }),
     );
     await startBoard();
 
@@ -453,10 +462,10 @@ describe('card media', () => {
     const { play } = stubPlayback();
 
     render(
-      <ExploreView
-        initialData={feed([card('v', 'launch film', true)], null)}
-        initialFilters={{ categories: [] }}
-      />,
+      ExploreView({
+        initialData: feed([card('v', 'launch film', true)], null),
+        initialFilters: { categories: [] },
+      }),
     );
     await startBoard();
     expect(play).not.toHaveBeenCalled();
@@ -470,10 +479,10 @@ describe('card media', () => {
     // that changes its parameters answers 404/400 rather than degrading. So a
     // failed transform costs one wasted request, not a missing card image.
     const { container } = render(
-      <ExploreView
-        initialData={feed([card('a', 'story')], null)}
-        initialFilters={{ categories: [] }}
-      />,
+      ExploreView({
+        initialData: feed([card('a', 'story')], null),
+        initialFilters: { categories: [] },
+      }),
     );
     await startBoard();
 
@@ -516,10 +525,10 @@ describe('card media', () => {
     );
 
     const { container } = render(
-      <ExploreView
-        initialData={feed([card('a', 'first story')], 'cur-1')}
-        initialFilters={{ categories: [] }}
-      />,
+      ExploreView({
+        initialData: feed([card('a', 'first story')], 'cur-1'),
+        initialFilters: { categories: [] },
+      }),
     );
     await startBoard();
 
@@ -544,10 +553,10 @@ describe('card media', () => {
     // The feed is third-party, so failures are normal — and a broken-image icon
     // where a story should be is a documented thing this board does not do.
     const { container } = render(
-      <ExploreView
-        initialData={feed([card('a', 'story')], null)}
-        initialFilters={{ categories: [] }}
-      />,
+      ExploreView({
+        initialData: feed([card('a', 'story')], null),
+        initialFilters: { categories: [] },
+      }),
     );
     await startBoard();
 

@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
-Sitemap: https://umuo.app/sitemap.xml
+Sitemap: https://ai.um1ng.me/sitemap.xml

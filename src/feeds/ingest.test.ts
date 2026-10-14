@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../data/api';
-import { SITE_NAME, SITE_ORIGIN } from '../site';
+import { SITE_ORIGIN } from '../site';
 import { sleep } from '../utils/coerce';
 import { canonicalizeUrl, ingestAllSources, knownCanonicalUrls, knownFingerprints } from './ingest';
 
@@ -356,7 +356,9 @@ describe('the upstream request identifies this site', () => {
     expect(fetchMock).toHaveBeenCalled();
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
     const headers = init?.headers as Record<string, string> | undefined;
-    expect(headers?.['user-agent']).toBe(`${SITE_NAME}/1.0 (+${SITE_ORIGIN})`);
+    expect(headers?.['user-agent']).toBe(`${new URL(SITE_ORIGIN).host}/1.0 (+${SITE_ORIGIN})`);
+    // RFC 9110: the product name is a token, so no whitespace before the slash.
+    expect(headers?.['user-agent']).toMatch(/^\S+\/1\.0 /);
     // The feed parser needs to be told what it is asking for.
     expect(headers?.accept).toContain('application/rss+xml');
   });

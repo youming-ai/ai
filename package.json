@@ -1,5 +1,5 @@
 {
-  "name": "umuo",
+  "name": "ai-desk",
   "private": true,
   "engines": {
     "node": ">=22.13",
@@ -38,29 +38,20 @@
     "feeds:probe": "bun scripts/feed-probe.ts"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "^14.3.4",
-    "@astrojs/react": "^6.0.6",
-    "astro": "^7.3.8",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "@astrojs/cloudflare": "latest",
+    "astro": "latest"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.10",
-    "@biomejs/biome": "2.5.1",
-    "@cloudflare/workers-types": "^4.20260702.1",
-    "@testing-library/dom": "^10.4.2",
-    "@testing-library/jest-dom": "^6.10.0",
-    "@testing-library/react": "^16.3.3",
-    "@types/node": "^26.6.5",
-    "@types/react": "^18.3.31",
-    "@types/react-dom": "^18.3.7",
-    "@vitejs/plugin-react": "^6.1.2",
-    "autoprefixer": "^10.6.1",
-    "jsdom": "^23.2.0",
-    "postcss": "^8.5.30",
-    "tailwindcss": "^3.4.19",
-    "typescript": "^5.9.3",
-    "vite": "^8.3.4",
-    "vitest": "^4.1.11"
+    "@astrojs/check": "latest",
+    "@biomejs/biome": "latest",
+    "@cloudflare/workers-types": "latest",
+    "@tailwindcss/vite": "latest",
+    "@testing-library/dom": "latest",
+    "@types/node": "latest",
+    "jsdom": "latest",
+    "tailwindcss": "latest",
+    "typescript": "^6.0.3",
+    "vitest": "latest",
+    "wrangler": "latest"
   }
 }

@@ -9,9 +9,8 @@ export const prerender = false;
 //
 // This is what lets the board append rows without a renderer in the browser:
 // the client fetches this, gets markup produced by the same components the first
-// page uses, and appends it. It is an Astro page endpoint rather than a route in
-// `worker/index.ts` because the dispatcher's TypeScript program has no DOM lib
-// (Workers types plus `lib.dom` collide), and the card components are DOM-typed.
+// page uses, and appends it. It is an Astro page endpoint, beside the pages
+// whose board it extends.
 //
 // `view` is untrusted input and only ever selects a wrapper element, so an
 // unrecognised value falls back to the grid: a stale link should render cards,

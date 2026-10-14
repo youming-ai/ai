@@ -1,13 +1,20 @@
 // Canonical production origin. Single source of truth for absolute URLs
 // (canonical/og tags, sitemap <loc>). Pure string — compiles under both
 // tsconfigs. TODO(template): replace with your domain.
-export const SITE_ORIGIN = 'https://umuo.app';
+export const SITE_ORIGIN = 'https://ai.um1ng.me';
 
 // Brand-facing copy. Single source of truth: the layout <title>/description
 // defaults and the RSS channel description import from here, so a rebrand
-// or positioning change edits one file, not three.
-export const SITE_NAME = 'umuo';
-export const SITE_TITLE = 'umuo — AI hardware desk';
+// or positioning change edits one file, not three. The title is the name
+// alone; the description says what the desk covers.
+export const SITE_NAME = 'AI Desk';
+export const SITE_TITLE = SITE_NAME;
+/** What every fetch the desk makes calls itself: ingest, and every probe in
+ *  scripts/, which must be answered the way ingest is. The product token is the
+ *  host rather than SITE_NAME, because a token cannot hold the name's spaces.
+ *  Measured against the name-based token it replaced: all 12 sources answered
+ *  this string with the same status and item count. */
+export const CRAWLER_USER_AGENT = `${new URL(SITE_ORIGIN).host}/1.0 (+${SITE_ORIGIN})`;
 export const SITE_DESCRIPTION =
   'Accelerators, processors, servers, memory and the datacenter build-out behind AI — collected from the hardware press and curated by model.';
 

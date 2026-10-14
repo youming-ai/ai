@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// Vitest uses the React plugin, not Astro's compiler. Pin route composition here;
+// Vitest does not compile Astro. Pin route composition here;
 // `bun run build` checks the actual Astro compilation and client script output.
 const source = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
 const home = source('src/pages/index.astro');
@@ -19,13 +19,12 @@ describe('shared Astro board page wiring', () => {
     expect(board).toContain('getExploreFeed(category ? { category } : {}, env, ctx)');
     expect(board).toContain('getExploreFilters(env, ctx)');
     expect(board).toContain("Astro.url.searchParams.get('view') === 'list' ? 'list' : 'grid'");
-    for (const prop of ['initialData', 'initialFilters', 'initialView']) {
-      expect(board).toContain(`${prop}={${prop}}`);
-    }
-    expect(board).toContain('initialCategory={category}');
+    expect(board).toMatch(
+      /set:html=\{ExploreView\(\{\s*initialData,\s*initialFilters,\s*initialCategory: category,\s*initialView,\s*\}\)\.value\}/,
+    );
     for (const route of [home, category]) {
       expect(route).toContain('import BoardPage from ');
-      expect(route).not.toMatch(/getExploreFeed|getExploreFilters|initialView|<ExploreView/);
+      expect(route).not.toMatch(/getExploreFeed|getExploreFilters|initialView|ExploreView/);
     }
   });
 
@@ -33,7 +32,7 @@ describe('shared Astro board page wiring', () => {
     expect(board.match(/<main>/g)).toHaveLength(1);
     expect(board).toContain('<h1 class="sr-only">{title}</h1>');
     expect(board).toContain('href="#explore-results"');
-    expect(source('src/components/explore/ExploreView.tsx')).toContain('id="explore-results"');
+    expect(source('src/components/explore/ExploreView.ts')).toContain('id="explore-results"');
     expect(board).not.toContain('<script');
     for (const route of [home, category]) {
       expect(route).not.toMatch(/<main>|Skip to links/);

@@ -73,8 +73,6 @@ function token(theme: Record<string, string>, other: Record<string, string>, nam
   return channels(v!);
 }
 
-const toHex = (c: Rgb): string => `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
-
 /** Composite `fg` over `bg` at `alpha`, the way the CSS alpha utilities do. */
 function mix(fg: Rgb, bg: Rgb, alpha: number): Rgb {
   return fg.map((c, i) => Math.round(c * alpha + bg[i]! * (1 - alpha))) as Rgb;
@@ -144,25 +142,38 @@ describe('design tokens', () => {
     // The inline theme script sets the SAME literal per branch before CSSOM
     // exists, so first paint already carries the right chrome in either theme.
     // This test pins the pair: pick them out of the script's theme record.
-    const scriptTheme = layout.match(/dark:\s*'rgb\(10 14 12\)',\s*light:\s*'rgb\(([^)]+)\)'/);
+    const scriptTheme = layout.match(/dark:\s*'rgb\(([^)]+)\)',\s*light:\s*'rgb\(([^)]+)\)'/);
     expect(scriptTheme, 'theme literals in the Layout theme script').not.toBeNull();
+    expect(scriptTheme![1].trim()).toBe(darkChannels.join(' '));
     const lightHex = light.bg;
     expect(lightHex, '--c-bg in the light block').toBeDefined();
     const lightChannels = [1, 3, 5].map((i) => Number.parseInt(lightHex!.slice(i, i + 2), 16));
-    expect(scriptTheme![1].trim()).toBe(lightChannels.join(' '));
+    expect(scriptTheme![2].trim()).toBe(lightChannels.join(' '));
   });
-  it('keeps the light accent readable where it actually renders', () => {
+  it('keeps the accent readable where it actually renders, in both themes', () => {
     // The 15%-fill active rail row is the dimmest surface pitch text sits on;
-    // a token test on white alone would pass while the real row fails.
-    const page = token(light, dark, 'bg');
-    const card = channels(toHex(mix(channels('#ffffff'), page, 0.7)));
-    const pitch = token(light, dark, 'pitch');
-    const rowFill = channels(toHex(mix(pitch, page, 0.15)));
-    // 11px caption text needs 4.5:1; no large-text exemption applies.
-    expect(contrast(pitch, rowFill), 'pitch on active rail row').toBeGreaterThanOrEqual(4.5);
-    expect(contrast(pitch, page), 'pitch on page').toBeGreaterThanOrEqual(4.5);
-    expect(contrast(pitch, card), 'pitch on card').toBeGreaterThanOrEqual(4.5);
-    expect(contrast(token(light, dark, 'live'), page), 'live on page').toBeGreaterThanOrEqual(4.5);
+    // a token test on the page alone would pass while the real row fails. Both
+    // themes, because the risk moved: the old green was in danger on the light
+    // ground, while #5200ff reads ~2.6:1 on the dark one — the default theme.
+    for (const [name, theme, other] of [
+      ['dark', dark, dark],
+      ['light', light, dark],
+    ] as const) {
+      const page = token(theme, other, 'bg');
+      const card = mix(token(theme, other, 'surface'), page, 0.7);
+      const pitch = token(theme, other, 'pitch');
+      const rowFill = mix(pitch, page, 0.15);
+      // 11px caption text needs 4.5:1; no large-text exemption applies.
+      expect(contrast(pitch, rowFill), `${name}: pitch on active rail row`).toBeGreaterThanOrEqual(
+        4.5,
+      );
+      expect(contrast(pitch, page), `${name}: pitch on page`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(pitch, card), `${name}: pitch on card`).toBeGreaterThanOrEqual(4.5);
+      expect(
+        contrast(token(theme, other, 'live'), page),
+        `${name}: live on page`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it('keeps the off-screen card skip in place', () => {

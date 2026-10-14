@@ -26,10 +26,12 @@ const initialView = Astro.url.searchParams.get('view') === 'list' ? 'list' : 'gr
 </a>
 <main>
   <h1 class="sr-only">{title}</h1>
-  <ExploreView
-    initialData={initialData}
-    initialFilters={initialFilters}
-    initialCategory={category}
-    initialView={initialView}
+  <Fragment
+    set:html={ExploreView({
+      initialData,
+      initialFilters,
+      initialCategory: category,
+      initialView,
+    }).value}
   />
 </main>

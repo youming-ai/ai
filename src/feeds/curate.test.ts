@@ -430,43 +430,42 @@ describe('curatePending', () => {
     expect(error).toHaveBeenCalled();
   });
 
-  it.each([
-    'stored',
-    'filtered',
-    'skipped',
-  ] as const)('does not report completion when the %s outcome rejects the batch', async (status) => {
-    const { db, ran } = curateDb([pendingRow(status === 'skipped' ? { description: '' } : {})]);
-    const submitted: Statement[][] = [];
-    vi.mocked(db.batch).mockImplementation(async (statements) => {
-      const batch = statements as unknown as Statement[];
-      submitted.push(batch);
-      // Model D1 rejecting the transaction at its outcome insert. This tests
-      // composition/error handling; rollback itself is D1's batch contract.
-      if (batch.some(isOutcome)) throw new Error('outcome insert failed');
-      return [];
-    });
-    const fetchMock = stubLlm({
-      values: { 1: { ...enrichment, isOnTopic: status !== 'filtered' } },
-    });
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+  it.each(['stored', 'filtered', 'skipped'] as const)(
+    'does not report completion when the %s outcome rejects the batch',
+    async (status) => {
+      const { db, ran } = curateDb([pendingRow(status === 'skipped' ? { description: '' } : {})]);
+      const submitted: Statement[][] = [];
+      vi.mocked(db.batch).mockImplementation(async (statements) => {
+        const batch = statements as unknown as Statement[];
+        submitted.push(batch);
+        // Model D1 rejecting the transaction at its outcome insert. This tests
+        // composition/error handling; rollback itself is D1's batch contract.
+        if (batch.some(isOutcome)) throw new Error('outcome insert failed');
+        return [];
+      });
+      const fetchMock = stubLlm({
+        values: { 1: { ...enrichment, isOnTopic: status !== 'filtered' } },
+      });
+      vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    const report = await curatePending(envWith(db));
+      const report = await curatePending(envWith(db));
 
-    expect(report).toMatchObject({ selected: 1, curated: 0, filtered: 0, skipped: 0, failed: 1 });
-    expect(submitted).toHaveLength(1);
-    const batch = submitted[0]!;
-    expect(batch[0]!.sql).toContain('UPDATE articles SET');
-    expect(batch.filter(isOutcome)).toHaveLength(1);
-    expect(batch.find(isOutcome)!.params[3]).toBe(status);
-    expect(ran.filter(isClaim)).toHaveLength(1);
-    expect(ran.every((statement) => isClaim(statement) || isOutcome(statement))).toBe(true);
-    // Failure logging stays separate; it neither completes the story nor
-    // erases the claim that spent this attempt. Skip failures retain the claim only.
-    expect(ran.filter(isOutcome).map((statement) => statement.params[3])).toEqual(
-      status === 'skipped' ? [] : ['failed'],
-    );
-    if (status === 'skipped') expect(fetchMock).not.toHaveBeenCalled();
-  });
+      expect(report).toMatchObject({ selected: 1, curated: 0, filtered: 0, skipped: 0, failed: 1 });
+      expect(submitted).toHaveLength(1);
+      const batch = submitted[0]!;
+      expect(batch[0]!.sql).toContain('UPDATE articles SET');
+      expect(batch.filter(isOutcome)).toHaveLength(1);
+      expect(batch.find(isOutcome)!.params[3]).toBe(status);
+      expect(ran.filter(isClaim)).toHaveLength(1);
+      expect(ran.every((statement) => isClaim(statement) || isOutcome(statement))).toBe(true);
+      // Failure logging stays separate; it neither completes the story nor
+      // erases the claim that spent this attempt. Skip failures retain the claim only.
+      expect(ran.filter(isOutcome).map((statement) => statement.params[3])).toEqual(
+        status === 'skipped' ? [] : ['failed'],
+      );
+      if (status === 'skipped') expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
 
   it('sends the selected stories out in batches of CURATION_BATCH_SIZE', async () => {
     const rows = Array.from({ length: CURATION_LIMIT + 5 }, (_, index) =>
