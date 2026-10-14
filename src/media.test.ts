@@ -224,7 +224,7 @@ describe('serveMedia', () => {
 
   it('refuses a non-image type rather than serving markup from our own origin', async () => {
     // An HTML object in the upstream store would otherwise render as markup
-    // under umuo.app — same-origin XSS, and `nosniff` does not help when the
+    // under our own origin — same-origin XSS, and `nosniff` does not help when the
     // declared type *is* HTML.
     for (const type of ['text/html', 'application/octet-stream', 'text/html; charset=utf-8']) {
       const fetchMock = vi.fn().mockResolvedValue(

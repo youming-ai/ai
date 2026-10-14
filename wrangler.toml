@@ -2,7 +2,7 @@
 # cache in front of it. The cron pulls the desk's RSS sources into D1 and then
 # curates the new rows with an OpenAI-compatible model; `/media/*` is relayed by
 # the entrypoint before Astro sees the request.
-name = "umuo"
+name = "ai"
 compatibility_date = "2026-07-17"
 compatibility_flags = ["nodejs_compat"]
 main = "./worker/entrypoint.ts"

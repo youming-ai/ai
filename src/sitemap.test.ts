@@ -107,7 +107,7 @@ describe('renderSitemap', () => {
 describe('canonical origin', () => {
   it('points at a host that actually serves the site', () => {
     // Every <loc>, canonical tag and og:url derives from this one constant.
-    expect(SITE_ORIGIN).toBe('https://umuo.app');
+    expect(SITE_ORIGIN).toBe('https://ai.um1ng.me');
     expect(SITE_ORIGIN.startsWith('https://')).toBe(true);
     expect(SITE_ORIGIN.endsWith('/')).toBe(false);
   });

@@ -177,7 +177,7 @@ export async function serveMedia(file: string): Promise<Response> {
 
     // The bytes are served from OUR origin, so the upstream's declared type
     // decides what a browser does with them: an HTML object in the storage
-    // bucket would render as markup under umuo.app. This is the gate the
+    // bucket would render as markup under our own origin. This is the gate the
     // previous proxy carried and its reasoning still holds — only images pass,
     // and SVG is excluded because it is a scripting context when navigated to
     // directly, which `nosniff` cannot prevent.

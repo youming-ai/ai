@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "umuo",
+      "name": "ai-desk",
       "dependencies": {
         "@astrojs/cloudflare": "latest",
         "astro": "latest",

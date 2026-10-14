@@ -38,7 +38,7 @@ bun install
 
 # One-time Cloudflare setup:
 bunx wrangler kv namespace create CACHE
-bunx wrangler d1 create umuo-content
+bunx wrangler d1 create ai-desk-content
 # → paste the returned ids into wrangler.toml
 
 # The curator's key (LLM_BASE_URL / LLM_MODEL live in wrangler.toml [vars]):
@@ -79,7 +79,7 @@ One secret: `LLM_API_KEY`. Without it nothing breaks — ingest, the board, the 
 ```mermaid
 graph TD
   Cron@{ shape: stadium, label: "cron */15" } --> Ingest[feeds/ingest: fetch, window, cap, dedupe, store]
-  Ingest --> D1[(D1 umuo-content)]
+  Ingest --> D1[(D1 ai-desk-content)]
   Ingest --> Curate[feeds/curate: drain the uncurated queue]
   Curate --> LLM[OpenAI-compatible endpoint]
   Curate --> D1

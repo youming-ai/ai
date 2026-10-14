@@ -96,9 +96,9 @@ Bun locally, `workerd` in production.
 
 |||
 |---|---|
-|Worker|`umuo`, deployed by Workers Builds from `main`|
+|Worker|`ai`, deployed by Workers Builds from `main`, served at `ai.um1ng.me`|
 |KV|`CACHE` `b5d6927ae…`|
-|D1|`DB` → `umuo-content`, primary region **APAC** (cannot be moved without recreating)|
+|D1|`DB` → `umuo-content`, primary region **APAC** (cannot be moved without recreating). The name predates the desk's rename: D1 databases cannot be renamed, so it stays|
 |Crons|`*/15 * * * *` ingest + curation, `17 3 * * *` retention sweep|
 |LLM|`LLM_BASE_URL` / `LLM_MODEL` (`mimo-v2.6-flash`, a reasoning model: 56–130s and ~2K reasoning tokens per batch of 8) are `[vars]`; `LLM_API_KEY` is a secret (`wrangler secret put`) and optional — without it the desk ingests and serves, and the queue grows|
 
