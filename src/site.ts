@@ -9,6 +9,12 @@ export const SITE_ORIGIN = 'https://umuo.app';
 // of its own any more, so its name is what it is.
 export const SITE_NAME = 'AI hardware desk';
 export const SITE_TITLE = SITE_NAME;
+/** What every fetch the desk makes calls itself: ingest, and every probe in
+ *  scripts/, which must be answered the way ingest is. The product token is the
+ *  host rather than SITE_NAME, because a token cannot hold the name's spaces.
+ *  Measured when it changed from `umuo/1.0`: all 12 sources answered this
+ *  string with the same status and item count as the old one. */
+export const CRAWLER_USER_AGENT = `${new URL(SITE_ORIGIN).host}/1.0 (+${SITE_ORIGIN})`;
 export const SITE_DESCRIPTION =
   'Accelerators, processors, servers, memory and the datacenter build-out behind AI — collected from the hardware press and curated by model.';
 

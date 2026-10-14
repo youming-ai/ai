@@ -22,11 +22,11 @@ import { parseRss } from '../src/feeds/rss';
 // the coverage figure it reported was measured against a rule we do not ship.
 import { transformedFeedImage } from '../src/images';
 import { FEED_SOURCES } from '../src/feeds/sources';
-import { SITE_NAME, SITE_ORIGIN } from '../src/site';
+import { CRAWLER_USER_AGENT } from '../src/site';
 
 const HEADERS = {
   accept: 'application/rss+xml, application/atom+xml, application/json, text/xml, */*',
-  'user-agent': `${SITE_NAME}/1.0 (+${SITE_ORIGIN})`,
+  'user-agent': CRAWLER_USER_AGENT,
 };
 
 /** The card slot is ~450 CSS px wide in the three-column desktop layout, and at

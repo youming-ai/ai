@@ -5,13 +5,17 @@
 // interpolated into `html` is escaped; only markup that `html` itself produced
 // passes through as it is.
 
-/** Markup that is safe to emit as it is. */
-export class Html {
+/** Markup that is safe to emit as it is. Only `html` and `attr` make one: the
+ *  class is not exported, so nothing outside this module can wrap a string
+ *  from a feed and have it pass through unescaped. */
+class Html {
   constructor(readonly value: string) {}
   toString(): string {
     return this.value;
   }
 }
+
+export type { Html };
 
 export type HtmlValue = Html | string | number | boolean | null | undefined | HtmlValue[];
 

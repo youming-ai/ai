@@ -17,11 +17,11 @@
 import { parseRss } from '../src/feeds/rss';
 import { FEED_SOURCES, INGEST_MAX_AGE_MS } from '../src/feeds/sources';
 import type { FeedSource } from '../src/feeds/types';
-import { SITE_ORIGIN } from '../src/site';
+import { CRAWLER_USER_AGENT } from '../src/site';
 
 const RSS_HEADERS = {
   accept: 'application/rss+xml, application/atom+xml, application/json, text/xml, */*',
-  'user-agent': `${new URL(SITE_ORIGIN).host}/1.0 (+${SITE_ORIGIN})`,
+  'user-agent': CRAWLER_USER_AGENT,
 };
 
 interface Probe {
