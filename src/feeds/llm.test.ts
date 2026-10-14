@@ -283,23 +283,23 @@ describe('shared execution deadline', () => {
     return { mock, signals };
   }
 
-  it.each([
-    false,
-    true,
-  ])('aborts at remaining budget, including body consumption (%s)', async (bodyOnly) => {
-    const budget = startBudget(CURATION_BUDGET_MS - 1000);
-    const { mock, signals } = stalledFetch(bodyOnly);
-    const result = expect(
-      enrichWithLLM('secret', BASE_URL, MODEL, story, budget),
-    ).rejects.toBeInstanceOf(CurationBudgetError);
-    await vi.advanceTimersByTimeAsync(999);
-    expect(signals[0]!.aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(1);
-    await result;
-    expect(signals[0]!.aborted).toBe(true);
-    expect(mock).toHaveBeenCalledTimes(1);
-    expect(vi.getTimerCount()).toBe(0);
-  });
+  it.each([false, true])(
+    'aborts at remaining budget, including body consumption (%s)',
+    async (bodyOnly) => {
+      const budget = startBudget(CURATION_BUDGET_MS - 1000);
+      const { mock, signals } = stalledFetch(bodyOnly);
+      const result = expect(
+        enrichWithLLM('secret', BASE_URL, MODEL, story, budget),
+      ).rejects.toBeInstanceOf(CurationBudgetError);
+      await vi.advanceTimersByTimeAsync(999);
+      expect(signals[0]!.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await result;
+      expect(signals[0]!.aborted).toBe(true);
+      expect(mock).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
 
   it('retains both measured attempt timeouts and the 500ms retry delay', async () => {
     const budget = startBudget();

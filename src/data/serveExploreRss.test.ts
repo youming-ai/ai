@@ -95,21 +95,21 @@ describe('serveExploreRss', () => {
     expect(await res.json()).toEqual({ error: 'upstream unavailable' });
   });
 
-  it.each([
-    'HIT',
-    'STALE',
-  ] as const)('serves a %s cached XML document with RSS headers', async (cache) => {
-    const { env } = mockEnv({
-      failing: true,
-      stored: { body: '<rss/>', at: cache === 'HIT' ? Date.now() : 0 },
-    });
-    const res = await serveExploreRss({}, env, mockCtx());
-    expect(res.status).toBe(200);
-    expect(res.headers.get('x-cache')).toBe(cache);
-    expect(res.headers.get('content-type')).toBe('application/rss+xml; charset=utf-8');
-    expect(res.headers.get('cache-control')).toBe('public, max-age=300');
-    expect(await res.text()).toBe('<rss/>');
-  });
+  it.each(['HIT', 'STALE'] as const)(
+    'serves a %s cached XML document with RSS headers',
+    async (cache) => {
+      const { env } = mockEnv({
+        failing: true,
+        stored: { body: '<rss/>', at: cache === 'HIT' ? Date.now() : 0 },
+      });
+      const res = await serveExploreRss({}, env, mockCtx());
+      expect(res.status).toBe(200);
+      expect(res.headers.get('x-cache')).toBe(cache);
+      expect(res.headers.get('content-type')).toBe('application/rss+xml; charset=utf-8');
+      expect(res.headers.get('cache-control')).toBe('public, max-age=300');
+      expect(await res.text()).toBe('<rss/>');
+    },
+  );
 
   // A feed poll should carry more than the web default, and the clamp in
   // normalizedExploreQuery has to stay above it or the request silently shrinks.
