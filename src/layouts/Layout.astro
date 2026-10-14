@@ -1,6 +1,5 @@
 ---
 import '../index.css';
-import Footer from '../components/Footer.astro';
 import {
   SITE_DESCRIPTION,
   SITE_LANGUAGE,
@@ -125,7 +124,6 @@ const canonicalUrl = `${SITE_ORIGIN}${canonicalPath}`;
       <div class="flex-1 w-full">
         <slot />
       </div>
-      <Footer />
     </div>
   </body>
 </html>

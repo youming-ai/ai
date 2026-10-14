@@ -1,7 +1,7 @@
 import { CATEGORIES } from '../categories';
 import { GLOBAL_FEED_LABEL, SITE_ORIGIN } from '../site';
 import type { ExploreArticle, ExploreFeed, ExploreFilterOption, ExploreFilterSet } from '../types';
-import { type Env, json, runCached } from './cache';
+import { type CachedResult, type Env, json, runCached } from './cache';
 import {
   type CountRow,
   EXPLORE_ARTICLE_COLUMNS,
@@ -116,6 +116,15 @@ export async function serveExplore(
   env: Env,
   ctx: ExecutionContext,
 ): Promise<Response> {
+  const result = await loadExplore(query, env, ctx);
+  return json(result.body, result.status, result.cache);
+}
+
+async function loadExplore(
+  query: ExploreQuery,
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<CachedResult> {
   const normalized = normalizedExploreQuery(query);
 
   // Deep pages bypass KV — `cursor` is user-controlled, so caching it lets an
@@ -126,10 +135,14 @@ export async function serveExplore(
   // a warm entry.
   if (normalized.cursor) {
     try {
-      return json(JSON.stringify(await queryExplore(normalized, env)), 200, 'MISS');
+      return {
+        body: JSON.stringify(await queryExplore(normalized, env)),
+        status: 200,
+        cache: 'MISS',
+      };
     } catch (error) {
       console.error('[data] explore page failed:', error);
-      return json('{"error":"upstream unavailable"}', 502, 'MISS');
+      return { body: '{"error":"upstream unavailable"}', status: 502, cache: 'MISS' };
     }
   }
 
@@ -217,18 +230,15 @@ export async function serveExploreRss(
     ctx,
   );
 
-  // Pass runCached's non-OK response through untouched: relabelling the JSON
-  // error body as application/rss+xml would hand every reader a parse error.
-  if (!cached.ok) return cached;
-
-  // Wrap the SWR's JSON-shaped response into the RSS content type. The body is
-  // still XML; runCached only inspects the string.
-  const xCache = cached.headers.get('x-cache') ?? 'MISS';
+  // Cache errors are JSON, not feed documents, and must not receive RSS caching headers.
+  if (cached.status < 200 || cached.status >= 300) {
+    return json(cached.body, cached.status, cached.cache);
+  }
   return new Response(cached.body, {
     status: cached.status,
     headers: {
       'content-type': 'application/rss+xml; charset=utf-8',
-      'x-cache': xCache,
+      'x-cache': cached.cache,
       // Deliberately longer than the KV fresh window (60s): feed readers poll
       // every 30–60 minutes, so a 5-minute edge cache saves origin hits
       // without any reader-visible staleness.
@@ -243,12 +253,13 @@ export async function getExploreFeed(
   ctx: ExecutionContext,
 ): Promise<ExploreFeed> {
   try {
-    const response = await serveExplore(query, env, ctx);
+    const result = await loadExplore(query, env, ctx);
     // `unavailable` is what keeps a D1 or KV outage from rendering as "no links
     // match these filters" — the reader is told the truth and the filters are
     // not blamed for it. Composer-only; the cached payload never carries it.
-    if (!response.ok) return { items: [], nextCursor: null, unavailable: true };
-    const parsed: unknown = await response.json();
+    if (result.status < 200 || result.status >= 300)
+      return { items: [], nextCursor: null, unavailable: true };
+    const parsed: unknown = JSON.parse(result.body);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
       return { items: [], nextCursor: null, unavailable: true };
     const feed = parsed as Partial<ExploreFeed>;
@@ -305,6 +316,11 @@ async function queryExploreFilters(env: Env): Promise<ExploreFilterSet> {
 }
 
 export async function serveExploreFilters(env: Env, ctx: ExecutionContext): Promise<Response> {
+  const result = await loadExploreFilters(env, ctx);
+  return json(result.body, result.status, result.cache);
+}
+
+async function loadExploreFilters(env: Env, ctx: ExecutionContext): Promise<CachedResult> {
   // Versioned: the filters payload changed shape once ({competitions,sources,
   // tags} became {categories}) while reusing the same unversioned key, so a
   // warm entry rendered an empty rail with no error. Bump on any payload change
@@ -325,9 +341,9 @@ export async function getExploreFilters(
   ctx: ExecutionContext,
 ): Promise<ExploreFilterSet> {
   try {
-    const response = await serveExploreFilters(env, ctx);
-    if (!response.ok) return FILTERS_FALLBACK;
-    const parsed: unknown = await response.json();
+    const result = await loadExploreFilters(env, ctx);
+    if (result.status < 200 || result.status >= 300) return FILTERS_FALLBACK;
+    const parsed: unknown = JSON.parse(result.body);
     if (!parsed || typeof parsed !== 'object') return FILTERS_FALLBACK;
     const filters = parsed as Partial<ExploreFilterSet>;
     // A 200 whose body is not the shape we expect is a cache entry from an

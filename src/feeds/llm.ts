@@ -1,5 +1,8 @@
 import { CATEGORIES, CURATOR_CATEGORY_KEYS } from '../categories';
-import { sleep } from '../utils/coerce';
+import { CurationBudget, MODEL_MAX_TOKENS } from './curationPolicy';
+
+export { CuratorTimeoutError, MIN_CURATOR_TEXT_CHARS } from './curationPolicy';
+
 import { ARTICLE_TYPES, type ArticleEnrichment } from './types';
 
 // The curator: one OpenAI-compatible /chat/completions call per batch of
@@ -7,32 +10,7 @@ import { ARTICLE_TYPES, type ArticleEnrichment } from './types';
 // the pre-Poche pipeline (deleted in dd341cb) and re-pointed at the AI-hardware
 // desk; the strict validators are unchanged because they were paid for.
 //
-// The two numbers that gate every call are measured, and they have already been
-// wrong once. A batch of 8 took ~27s on the previous provider's model, which is
-// where the 60s floor came from. Swapping in mimo-v2.6-flash measured **25s for
-// a single story and 130s for the production batch of 8**, so a 60s ceiling
-// aborted every batch — and an aborted batch is indistinguishable from a broken
-// model: each story burns one of its attempts and eventually leaves the queue
-// uncurated for good. Raise these when the model changes, not after.
-const REQUEST_TIMEOUT_MS = 150_000;
-const TIMEOUT_BACKOFF_MS = 15_000;
-
-/** Two attempts, not three. At the measured latency two timeouts already cost
- *  five minutes, and a third cannot fit in a 15-minute cron tick alongside the
- *  ingest that runs first. A batch that fails twice is retried by the *next*
- *  tick — the rows stay pending, which is a better retry than a longer one. */
-const MAX_ATTEMPTS = 2;
-
-/** Thrown when a call ran out of time rather than out of contract. The curator
- *  treats the two differently on purpose: a timeout means the model is slow, and
- *  answering the same stories one at a time costs the same per story while
- *  spending the whole tick, so it does not fan out. */
-export class CuratorTimeoutError extends Error {
-  constructor(label: string) {
-    super(`${label} timed out`);
-    this.name = 'CuratorTimeoutError';
-  }
-}
+// Execution caps, deadlines and retries live in curationPolicy, not the prompt.
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -202,12 +180,6 @@ export interface CuratorArticle {
   url: string;
 }
 
-/** Below this the model has nothing to judge and the tick would spend a call on
- *  a title alone; such a story keeps its pre-curation deck and leaves the queue
- *  as a `skipped` run. Measured feeds carry 95–1164 median characters, so this
- *  only fires on the genuinely empty ones. */
-export const MIN_CURATOR_TEXT_CHARS = 40;
-
 function promptFor(article: CuratorArticle): string {
   return [...CLASSIFIER_RULES, JSON_FIELDS, '', ...articleBlock(article)].join('\n');
 }
@@ -239,7 +211,7 @@ async function requestLLM(
   baseUrl: string,
   model: string,
   input: string,
-  attempt: number,
+  signal: AbortSignal,
 ): Promise<Response> {
   return fetch(`${baseUrl.replace(/\/+$/, '')}/chat/completions`, {
     method: 'POST',
@@ -253,40 +225,25 @@ async function requestLLM(
       response_format: { type: 'json_object' },
       // Explicit, because a provider default can be low enough to cut a batch
       // reply off mid-JSON — observed once on mimo at the production batch size.
-      max_tokens: 8192,
+      max_tokens: MODEL_MAX_TOKENS,
     }),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS + attempt * TIMEOUT_BACKOFF_MS),
+    signal,
   });
 }
 
-/** MAX_ATTEMPTS attempts, backoff 500 × (attempt + 1). Both an HTTP error status
- *  and an unparseable payload retry; the last attempt's error propagates — as a
- *  `CuratorTimeoutError` when the attempt ran out of time, so the caller can tell
- *  a slow model from an incoherent one. */
+/** Keep transport, body consumption and validation inside the same attempt. */
 async function callWithRetry<T>(
-  request: (attempt: number) => Promise<Response>,
+  request: (signal: AbortSignal) => Promise<Response>,
   parse: (text: string) => T,
   failLabel: string,
+  budget: CurationBudget,
 ): Promise<T> {
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    try {
-      const response = await request(attempt);
-      if (response.ok) {
-        const data = (await response.json()) as { choices?: { message?: { content?: string } }[] };
-        return parse(data.choices?.[0]?.message?.content ?? '');
-      }
-      throw new Error(`${failLabel} failed with ${response.status}`);
-    } catch (error) {
-      if (attempt === MAX_ATTEMPTS - 1) {
-        if (error instanceof Error && error.name === 'TimeoutError') {
-          throw new CuratorTimeoutError(failLabel);
-        }
-        throw error;
-      }
-    }
-    await sleep(500 * (attempt + 1));
-  }
-  throw new Error(`${failLabel} failed`);
+  return budget.run(async (signal) => {
+    const response = await request(signal);
+    if (!response.ok) throw new Error(`${failLabel} failed with ${response.status}`);
+    const data = (await response.json()) as { choices?: { message?: { content?: string } }[] };
+    return parse(data.choices?.[0]?.message?.content ?? '');
+  }, failLabel);
 }
 
 export async function enrichWithLLM(
@@ -294,12 +251,14 @@ export async function enrichWithLLM(
   baseUrl: string,
   model: string,
   article: CuratorArticle,
+  budget = new CurationBudget(),
 ): Promise<ArticleEnrichment> {
   if (!apiKey) throw new Error('LLM_API_KEY is not configured');
   return callWithRetry(
-    (attempt) => requestLLM(apiKey, baseUrl, model, promptFor(article), attempt),
+    (signal) => requestLLM(apiKey, baseUrl, model, promptFor(article), signal),
     (text) => parseEnrichment(JSON.parse(text) as unknown),
     'LLM request',
+    budget,
   );
 }
 
@@ -312,11 +271,12 @@ export async function enrichBatchWithLLM(
   baseUrl: string,
   model: string,
   articles: CuratorArticle[],
+  budget = new CurationBudget(),
 ): Promise<ArticleEnrichment[]> {
   if (!apiKey) throw new Error('LLM_API_KEY is not configured');
   if (articles.length === 0) return [];
   return callWithRetry(
-    (attempt) => requestLLM(apiKey, baseUrl, model, promptForBatch(articles), attempt),
+    (signal) => requestLLM(apiKey, baseUrl, model, promptForBatch(articles), signal),
     (text) => {
       const results = parseBatch(JSON.parse(text) as unknown);
       if (results.length !== articles.length) {
@@ -325,6 +285,7 @@ export async function enrichBatchWithLLM(
       return results;
     },
     'LLM batch request',
+    budget,
   );
 }
 

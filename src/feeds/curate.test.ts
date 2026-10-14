@@ -8,6 +8,7 @@ import {
   MAX_CURATION_ATTEMPTS,
   pendingCurationCount,
 } from './curate';
+import { CURATION_BUDGET_MS } from './curationPolicy';
 import { MIN_CURATOR_TEXT_CHARS } from './llm';
 
 // The curator's policy, pinned without a model: which rows it picks, what it
@@ -18,6 +19,7 @@ import { MIN_CURATOR_TEXT_CHARS } from './llm';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 // The retry backoff is 500ms then 1000ms per story; a rejected batch that falls
@@ -39,8 +41,8 @@ const isOutcome = (statement: Statement) =>
   statement.sql.includes('INSERT INTO agent_runs') && !isClaim(statement);
 
 /** The D1 surface the curator touches: the queue read, per-statement run()
- *  (claims, run log, skip marker), and batch() (the article update plus its tag
- *  rows). `wins` decides each claim, keyed by article id — the claim binds the id
+ *  (claims and failures), and batch() (article, tags, and completion outcome).
+ *  `wins` decides each claim, keyed by article id — the claim binds the id
  *  fourth — so a race another invocation won can be modelled. */
 function curateDb(rows: Record<string, unknown>[], wins: (id: unknown) => boolean = () => true) {
   const ran: Statement[] = [];
@@ -127,9 +129,9 @@ function llmResponse(content: unknown, status = 200): Response {
  *  legitimately matches its input from looking like a rejected one. */
 function stubLlm(
   options: { values?: Record<number, unknown>; raw?: Record<number, () => Response> } = {},
-): ReturnType<typeof vi.fn> {
+) {
   let call = 0;
-  const mock = vi.fn().mockImplementation(async (_url: string, init: { body: string }) => {
+  const mock = vi.fn(async (_url: string, init: { body: string }) => {
     call += 1;
     // `raw` replaces the whole response (to model a malformed or failing call);
     // `values` replaces the enrichment inside whatever shape the call has.
@@ -237,7 +239,13 @@ describe('curatePending', () => {
     expect(prompt).toContain('Second story');
     expect(prompt).not.toContain('HBM4 pricing climbs');
     expect(batched).toHaveLength(1);
-    expect(ran.filter(isOutcome).map((statement) => statement.params[1])).toEqual(['fp-2']);
+    expect(ran.filter(isOutcome)).toEqual([]);
+    expect(
+      batched
+        .flat()
+        .filter(isOutcome)
+        .map((statement) => statement.params[1]),
+    ).toEqual(['fp-2']);
   });
 
   it('writes an on-beat story back and logs a stored run', async () => {
@@ -272,7 +280,9 @@ describe('curatePending', () => {
       .map((statement) => statement.params[1]);
     expect(tagRows).toEqual(['hbm', 'supply']);
 
-    const run = ran.find(isOutcome)!;
+    expect(batched).toHaveLength(1);
+    expect(ran.filter(isOutcome)).toEqual([]);
+    const run = statements.find(isOutcome)!;
     expect(run.params).toContain('stored');
     expect(run.params).toContain('test-model');
     // article_fingerprint and article_id are both the article id, because
@@ -310,11 +320,13 @@ describe('curatePending', () => {
     expect(update.params[5]).toBe(0);
     expect(update.params[6]).toBe('filtered');
     expect(update.params[3]).toBeNull();
-    expect(ran.find(isOutcome)!.params).toContain('filtered');
+    expect(batched).toHaveLength(1);
+    expect(ran.filter(isOutcome)).toEqual([]);
+    expect(batched[0]!.find(isOutcome)!.params).toContain('filtered');
   });
 
   it('skips a story with too little text without spending a call', async () => {
-    const { db, ran } = curateDb([
+    const { db, ran, batched } = curateDb([
       pendingRow({ description: 'x'.repeat(MIN_CURATOR_TEXT_CHARS - 1) }),
     ]);
     const fetchMock = vi.fn();
@@ -326,11 +338,21 @@ describe('curatePending', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     // enriched_at is still set, otherwise the story would be re-selected and
     // counted as pending on every tick forever.
-    const skip = ran.find((statement) =>
-      statement.sql.includes('UPDATE articles SET enriched_at'),
-    )!;
+    expect(batched).toHaveLength(1);
+    expect(batched[0]).toHaveLength(2);
+    expect(ran.filter(isOutcome)).toEqual([]);
+    expect(ran.every(isClaim)).toBe(true);
+    const skip = batched[0]![0]!;
+    expect(skip.sql).toContain('UPDATE articles SET enriched_at');
     expect(skip.params[2]).toBe('fp-1');
-    expect(ran.find(isOutcome)!.params).toContain('skipped');
+    expect(batched[0]![1]!.params.slice(1, 7)).toEqual([
+      'fp-1',
+      'toms-hardware',
+      'skipped',
+      'test-model',
+      'fp-1',
+      'too little text to curate',
+    ]);
   });
 
   it('falls back to one call per story when the batch is rejected', async () => {
@@ -338,7 +360,7 @@ describe('curatePending', () => {
     // first — the model may simply have truncated — and only after those
     // attempts are exhausted does the batch degrade to per-story calls. One story
     // the model then refuses must still not cost the other one.
-    const { db, ran } = curateDb([
+    const { db, ran, batched } = curateDb([
       pendingRow(),
       pendingRow({ id: 'fp-2', title: 'Second story', url: 'https://example.com/2' }),
     ]);
@@ -357,7 +379,9 @@ describe('curatePending', () => {
     // 2 rejected batch attempts + 1 single success + 2 attempts for the story
     // that never answers.
     expect(fetchMock).toHaveBeenCalledTimes(5);
-    const statuses = ran.filter(isOutcome).map((statement) => statement.params[3]);
+    const statuses = [...ran, ...batched.flat()]
+      .filter(isOutcome)
+      .map((statement) => statement.params[3]);
     expect(statuses.sort()).toEqual(['failed', 'stored']);
   });
 
@@ -406,6 +430,44 @@ describe('curatePending', () => {
     expect(error).toHaveBeenCalled();
   });
 
+  it.each([
+    'stored',
+    'filtered',
+    'skipped',
+  ] as const)('does not report completion when the %s outcome rejects the batch', async (status) => {
+    const { db, ran } = curateDb([pendingRow(status === 'skipped' ? { description: '' } : {})]);
+    const submitted: Statement[][] = [];
+    vi.mocked(db.batch).mockImplementation(async (statements) => {
+      const batch = statements as unknown as Statement[];
+      submitted.push(batch);
+      // Model D1 rejecting the transaction at its outcome insert. This tests
+      // composition/error handling; rollback itself is D1's batch contract.
+      if (batch.some(isOutcome)) throw new Error('outcome insert failed');
+      return [];
+    });
+    const fetchMock = stubLlm({
+      values: { 1: { ...enrichment, isOnTopic: status !== 'filtered' } },
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const report = await curatePending(envWith(db));
+
+    expect(report).toMatchObject({ selected: 1, curated: 0, filtered: 0, skipped: 0, failed: 1 });
+    expect(submitted).toHaveLength(1);
+    const batch = submitted[0]!;
+    expect(batch[0]!.sql).toContain('UPDATE articles SET');
+    expect(batch.filter(isOutcome)).toHaveLength(1);
+    expect(batch.find(isOutcome)!.params[3]).toBe(status);
+    expect(ran.filter(isClaim)).toHaveLength(1);
+    expect(ran.every((statement) => isClaim(statement) || isOutcome(statement))).toBe(true);
+    // Failure logging stays separate; it neither completes the story nor
+    // erases the claim that spent this attempt. Skip failures retain the claim only.
+    expect(ran.filter(isOutcome).map((statement) => statement.params[3])).toEqual(
+      status === 'skipped' ? [] : ['failed'],
+    );
+    if (status === 'skipped') expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('sends the selected stories out in batches of CURATION_BATCH_SIZE', async () => {
     const rows = Array.from({ length: CURATION_LIMIT + 5 }, (_, index) =>
       pendingRow({ id: `fp-${index}`, url: `https://example.com/${index}` }),
@@ -429,6 +491,127 @@ describe('curatePending', () => {
       (call) => (JSON.parse(call[1].body).messages[0].content.match(/--- STORY /g) ?? []).length,
     );
     expect(sizes).toEqual(expectedSizes);
+  });
+});
+
+describe('curation budget and claims', () => {
+  function clock() {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  }
+
+  it('does not claim candidates when selection consumes the budget', async () => {
+    clock();
+    const { db, ran, batched, prepare } = curateDb([pendingRow()]);
+    const original = prepare.getMockImplementation()!;
+    prepare.mockImplementation((sql) => {
+      const statement = original(sql);
+      if (sql.includes('ORDER BY')) vi.setSystemTime(CURATION_BUDGET_MS);
+      return statement;
+    });
+    const fetchMock = stubLlm();
+    await expect(curatePending(envWith(db))).resolves.toMatchObject({ selected: 0, failed: 0 });
+    expect(ran).toEqual([]);
+    expect(batched).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('audits a claim that consumed the budget without unclaiming or calling the model', async () => {
+    clock();
+    const { db, ran, batched } = curateDb([pendingRow(), pendingRow({ id: 'fp-2' })], () => {
+      vi.setSystemTime(CURATION_BUDGET_MS);
+      return true;
+    });
+    const fetchMock = stubLlm();
+    const report = await curatePending(envWith(db));
+    expect(report).toMatchObject({ selected: 1, failed: 1, curated: 0 });
+    expect(ran.filter(isClaim)).toHaveLength(1);
+    expect(ran.filter(isOutcome).map((row) => row.params.slice(1, 7))).toEqual([
+      ['fp-1', 'toms-hardware', 'failed', 'test-model', 'fp-1', 'curation time budget exhausted'],
+    ]);
+    expect(ran.every((row) => isClaim(row) || isOutcome(row))).toBe(true);
+    expect(batched).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('shares the deadline across batches and leaves later candidates unclaimed', async () => {
+    clock();
+    // Like the batching test, the fake ignores SQL LIMIT to exercise >1 batch
+    // without changing the production cap of four.
+    const rows = Array.from({ length: CURATION_BATCH_SIZE + 1 }, (_, i) =>
+      pendingRow({ id: `fp-${i}` }),
+    );
+    const { db, ran, batched } = curateDb(rows);
+    const answer = stubLlm();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: { body: string }) => {
+        vi.setSystemTime(CURATION_BUDGET_MS - 1);
+        return answer(url, init);
+      }),
+    );
+    const batchWrite = vi.mocked(db.batch).getMockImplementation()!;
+    vi.mocked(db.batch).mockImplementation(async (statements) => {
+      const result = await batchWrite(statements);
+      vi.setSystemTime(CURATION_BUDGET_MS);
+      return result;
+    });
+    const report = await curatePending(envWith(db));
+    expect(report).toMatchObject({
+      selected: CURATION_BATCH_SIZE,
+      curated: CURATION_BATCH_SIZE,
+      failed: 0,
+    });
+    expect(answer).toHaveBeenCalledTimes(1);
+    expect(ran.filter(isClaim)).toHaveLength(CURATION_BATCH_SIZE);
+    expect(batched.flat().filter(isOutcome)).toHaveLength(CURATION_BATCH_SIZE);
+    expect(ran.some((row) => row.params.includes(`fp-${CURATION_BATCH_SIZE}`))).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('clamps fallback and audits every claimed story, including fallbacks never started', async () => {
+    clock();
+    const { db, ran, batched } = curateDb([
+      pendingRow(),
+      pendingRow({ id: 'fp-2' }),
+      pendingRow({ id: 'fp-3' }),
+    ]);
+    let call = 0;
+    let activeSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      call += 1;
+      if (call <= 2) return llmResponse({ results: [] });
+      if (call === 3) {
+        vi.setSystemTime(CURATION_BUDGET_MS - 1000);
+        return llmResponse(enrichment);
+      }
+      activeSignal = init.signal!;
+      return new Promise<Response>((_resolve, reject) => {
+        activeSignal!.addEventListener('abort', () => reject(activeSignal!.reason), { once: true });
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = curatePending(envWith(db));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(call).toBe(4); // two batch failures, one successful fallback, one pending
+    await vi.advanceTimersByTimeAsync(999);
+    expect(activeSignal!.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await result).toMatchObject({ selected: 3, curated: 1, failed: 2 });
+    expect(activeSignal!.aborted).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(4); // no retry or third-story fallback
+    expect(ran.filter(isClaim)).toHaveLength(3);
+    expect(
+      ran.filter(isOutcome).map((row) => [row.params[1], row.params[3], row.params[6]]),
+    ).toEqual([
+      ['fp-2', 'failed', 'curation time budget exhausted'],
+      ['fp-3', 'failed', 'curation time budget exhausted'],
+    ]);
+    expect(batched).toHaveLength(1);
+    expect(batched[0]!.find(isOutcome)!.params[3]).toBe('stored');
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 

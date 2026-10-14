@@ -1,18 +1,8 @@
 ---
-import { env } from 'cloudflare:workers';
-import ExploreView from '../components/explore/ExploreView';
-import { getExploreFeed, getExploreFilters } from '../data/api';
+import BoardPage from '../components/explore/BoardPage.astro';
 import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN, SITE_TITLE } from '../site';
 import Layout from '../layouts/Layout.astro';
 
-const ctx = Astro.locals.cfContext;
-const [initialData, initialFilters] = await Promise.all([
-  getExploreFeed({}, env, ctx),
-  getExploreFilters(env, ctx),
-]);
-// The layout toggle is a link, so the choice lives in the URL — one source of
-// truth for the server-rendered board and the appended pages alike.
-const initialView = Astro.url.searchParams.get('view') === 'list' ? 'list' : 'grid';
 const websiteJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
@@ -24,16 +14,8 @@ const websiteJsonLd = {
 ---
 <Layout title={SITE_TITLE}>
   <script is:inline type="application/ld+json" set:html={JSON.stringify(websiteJsonLd)} />
-  <a
-    href="#explore-results"
-    class="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-control focus:bg-panel focus:px-3 focus:py-2 ds-caption"
-  >
-    Skip to links
-  </a>
-  <main>
-    <h1 class="sr-only">{SITE_TITLE}</h1>
-    <ExploreView initialData={initialData} initialFilters={initialFilters} initialView={initialView} />
-  </main>
+  <BoardPage title={SITE_TITLE} />
+  <!-- Keep route entries so the build's downloaded-JS budget can trace the shared board chunk. -->
   <script>
     import '../scripts/board';
   </script>
