@@ -1,6 +1,10 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Classes are looked for in src/ only, as v3's content glob did. Tailwind 4
+   would otherwise scan the whole repo, and design-tokens/tokens.json and the
+   docs name utilities in prose (px-page-x, shadow-panel…) that no page uses. */
+@import 'tailwindcss' source('../src');
+/* The theme still lives in tailwind.config.js: the tokens test reads its font
+   families, and every colour there is a channel triplet from this file. */
+@config '../tailwind.config.js';
 
 /* ── Self-hosted fonts ───────────────────────────────────────────────────────
    Was three families / nine weights from fonts.googleapis.com, behind a
@@ -147,6 +151,13 @@
     @apply bg-night text-chalk font-body antialiased;
   }
 
+  /* Tailwind 4 resets buttons to the platform's default cursor; this board's
+     buttons (load more, the theme control) kept v3's pointer. */
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+
   :focus-visible {
     outline: 2px solid rgb(var(--c-pitch));
     outline-offset: 2px;
@@ -160,23 +171,7 @@
   .ds-segmented {
     @apply flex items-center gap-1 p-1 rounded-pill bg-panel/60 border border-line/20 select-none;
   }
-  /* Tactile press feedback for any pressable (buttons, tabs, cards). Scoped
-     transition (never `all`) covering hover colors + the press scale. */
-  .ds-press {
-    transition:
-      transform 150ms var(--ease-out),
-      color 150ms var(--ease-out),
-      background-color 150ms var(--ease-out),
-      border-color 150ms var(--ease-out),
-      box-shadow 150ms var(--ease-out),
-      opacity 150ms var(--ease-out),
-      filter 150ms var(--ease-out);
-  }
-  .ds-press:active {
-    transform: scale(0.97);
-  }
   @media (prefers-reduced-motion: reduce) {
-    .ds-press:active,
     .ds-seg-tab:active {
       transform: none;
     }
@@ -194,7 +189,7 @@
     transform: scale(0.97);
   }
   .ds-seg-tab-active {
-    @apply bg-overlay/10 text-chalk shadow-sm font-bold;
+    @apply bg-overlay/10 text-chalk shadow-xs font-bold;
   }
   .ds-seg-tab-inactive {
     @apply text-chalkdim hover:text-chalk;
@@ -266,6 +261,29 @@
   .ds-signal::after {
     width: var(--signal, 0%);
     background: rgb(var(--signal-accent, var(--c-pitch)));
+  }
+}
+
+/* Tactile press feedback for any pressable (buttons, tabs, cards). Scoped
+   transition (never `all`) covering hover colors + the press scale. A utility
+   rather than a component class because `.ds-btn-secondary` applies it, and
+   Tailwind 4 only lets @apply reach utilities. */
+@utility ds-press {
+  transition:
+    transform 150ms var(--ease-out),
+    color 150ms var(--ease-out),
+    background-color 150ms var(--ease-out),
+    border-color 150ms var(--ease-out),
+    box-shadow 150ms var(--ease-out),
+    opacity 150ms var(--ease-out),
+    filter 150ms var(--ease-out);
+  &:active {
+    transform: scale(0.97);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &:active {
+      transform: none;
+    }
   }
 }
 
