@@ -52,19 +52,22 @@ describe('renderExploreCards', () => {
 
   it('escapes a hostile title rather than injecting it', () => {
     // The fragment is inserted with insertAdjacentHTML, so an unescaped title
-    // would be an XSS hole fed by the upstream feed. React escapes on render —
-    // this pins that the fragment goes through React rather than string
-    // concatenation.
+    // would be an XSS hole fed by the upstream feed. The `html` template escapes
+    // every interpolation — this pins that the fragment goes through it rather
+    // than through string concatenation, in text and in attributes alike.
     const html = renderExploreCards(
       [
         article({
           title: '<script>alert(1)</script>',
           description: '<img src=x onerror=alert(2)>',
+          sourceDomain: 'x" onmouseover="alert(3)',
         }),
       ],
       'grid',
     );
     expect(html).not.toContain('<script>');
+    expect(html).not.toContain('" onmouseover="');
+    expect(html).toContain('title="Source: x&quot; onmouseover=&quot;alert(3)"');
     expect(html).toContain('&lt;script&gt;');
     // Asserted as the whole escaped string, not as the absence of "onerror": the
     // escaped text legitimately contains that substring, and it is inert there.

@@ -1,7 +1,7 @@
 // @ts-check
-import { defineConfig } from 'astro/config';
-import react from '@astrojs/react';
+
 import cloudflare from '@astrojs/cloudflare';
+import { defineConfig } from 'astro/config';
 
 // https://astro.build/config
 export default defineConfig({
@@ -17,5 +17,4 @@ export default defineConfig({
   // not the deprecated string signature) so the Cloudflare adapter does not
   // auto-provision a SESSION KV binding.
   session: { driver: { entrypoint: 'unstorage/drivers/null' } },
-  integrations: [react()],
 });

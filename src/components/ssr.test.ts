@@ -1,56 +1,50 @@
 // @vitest-environment node
-// The content islands render on the server (client:load), so they must produce
-// real HTML without touching window/document — and must produce it identically
-// on both sides, since a hydration mismatch throws the SSR markup away. Node
-// environment on purpose: `document` is undefined here, exactly like workerd.
-import { renderToString } from 'react-dom/server';
+// The board renders on the server, in workerd, so it must produce real HTML
+// without touching window/document. Node environment on purpose: `document` is
+// undefined here, exactly like workerd.
 import { expect, it } from 'vitest';
-import { SITE_ORIGIN } from '../site';
 import { CATEGORIES } from '../categories';
+import { SITE_ORIGIN } from '../site';
 import ExploreView, { ABOVE_THE_FOLD_CARDS } from './explore/ExploreView';
 
 it('renders the Explore shell server-side without touching browser globals', () => {
-  const html = renderToString(
-    <ExploreView
-      initialData={{ items: [], nextCursor: null }}
-      initialFilters={{ categories: [] }}
-    />,
-  );
+  const html = ExploreView({
+    initialData: { items: [], nextCursor: null },
+    initialFilters: { categories: [] },
+  }).value;
   expect(html).toContain('All links'); // the rail's global row
-  // The theme switcher SSRs as an icon-less button; localStorage stays
-  // unread at render time so the hydration pass always agrees.
+  // The theme control renders as an icon-less button: localStorage is the
+  // script's to read, after paint.
   expect(html).toContain('aria-label="Theme"');
 });
 
 it('renders article cards server-side', () => {
-  const html = renderToString(
-    <ExploreView
-      initialData={{
-        items: [
-          {
-            id: '1',
-            title: 'New flagship GPU beats its predecessor',
-            description: '',
-            summary: 'The new flagship GPU wins every benchmark.',
-            blurb: '',
-            url: 'https://tomshardware.com/pc-components',
-            imageUrl: '',
-            isVideo: false,
-            imageWidth: 0,
-            imageHeight: 0,
-            sourceDomain: 'tomshardware.com',
-            publishedAt: 1786080856000,
-            category: 'tools',
-            tags: ['tools'],
-            qualityScore: 82,
-            freshnessScore: 60,
-          },
-        ],
-        nextCursor: null,
-      }}
-      initialFilters={{ categories: [] }}
-    />,
-  );
+  const html = ExploreView({
+    initialData: {
+      items: [
+        {
+          id: '1',
+          title: 'New flagship GPU beats its predecessor',
+          description: '',
+          summary: 'The new flagship GPU wins every benchmark.',
+          blurb: '',
+          url: 'https://tomshardware.com/pc-components',
+          imageUrl: '',
+          isVideo: false,
+          imageWidth: 0,
+          imageHeight: 0,
+          sourceDomain: 'tomshardware.com',
+          publishedAt: 1786080856000,
+          category: 'tools',
+          tags: ['tools'],
+          qualityScore: 82,
+          freshnessScore: 60,
+        },
+      ],
+      nextCursor: null,
+    },
+    initialFilters: { categories: [] },
+  }).value;
   expect(html).toContain('New flagship GPU beats its predecessor');
   expect(html).toContain('tomshardware.com');
   // The card leads with the category now; the type label it used to lead with
@@ -63,40 +57,38 @@ it('renders a feed-supplied video as a <video> element, never as an <img>', () =
   // Regression: the 豆包 launch item carried a 556MB .mp4 in its image field,
   // which an <img> cannot render — the browser downloaded the whole file and
   // only then fired onerror.
-  const html = renderToString(
-    <ExploreView
-      initialData={{
-        items: [
-          {
-            id: 'v1',
-            title: 'Launch film',
-            description: '',
-            summary: '',
-            blurb: '',
-            url: 'https://o.doubao.com/',
-            imageUrl: 'https://cdn.example.com/hero_1080p_video.mp4',
-            isVideo: true,
-            imageWidth: 0,
-            imageHeight: 0,
-            sourceDomain: 'o.doubao.com',
-            publishedAt: 1789434835000,
-            category: 'tools',
-            tags: ['tools'],
-            qualityScore: 90,
-            freshnessScore: 100,
-          },
-        ],
-        nextCursor: null,
-      }}
-      initialFilters={{ categories: [] }}
-    />,
-  );
+  const html = ExploreView({
+    initialData: {
+      items: [
+        {
+          id: 'v1',
+          title: 'Launch film',
+          description: '',
+          summary: '',
+          blurb: '',
+          url: 'https://o.doubao.com/',
+          imageUrl: 'https://cdn.example.com/hero_1080p_video.mp4',
+          isVideo: true,
+          imageWidth: 0,
+          imageHeight: 0,
+          sourceDomain: 'o.doubao.com',
+          publishedAt: 1789434835000,
+          category: 'tools',
+          tags: ['tools'],
+          qualityScore: 90,
+          freshnessScore: 100,
+        },
+      ],
+      nextCursor: null,
+    },
+    initialFilters: { categories: [] },
+  }).value;
   expect(html).toContain('<video');
   expect(html).toContain('hero_1080p_video.mp4');
   expect(html).not.toContain('<img');
-  // A rendered `autoplay` would start before the island hydrates — cached media
-  // or slow JS would expose reduced-motion readers to the loop the effect is
-  // supposed to suppress. Playback begins from the effect instead.
+  // A rendered `autoplay` would start before `board.ts` has checked reduced
+  // motion — cached media or slow JS would expose reduced-motion readers to the
+  // loop the script is supposed to suppress. Playback begins from the script.
   expect(html).not.toContain('autoplay');
   expect(html).toContain('muted');
   expect(html).toContain('loop=""');
@@ -108,30 +100,26 @@ it("says the feed is unavailable rather than blaming the reader's filters", () =
   // match these filters. Clear one to widen the explore feed." — a D1 or KV
   // outage presented as the reader's own doing, with an HTTP 200 and nothing
   // else to notice.
-  const html = renderToString(
-    <ExploreView
-      initialData={{ items: [], nextCursor: null, unavailable: true }}
-      initialFilters={{ categories: [] }}
-    />,
-  );
+  const html = ExploreView({
+    initialData: { items: [], nextCursor: null, unavailable: true },
+    initialFilters: { categories: [] },
+  }).value;
 
   expect(html).toContain('temporarily unavailable');
   expect(html).not.toContain('No links match these filters');
 });
 
 it('keeps every hub reachable when the counts are unknown', () => {
-  const html = renderToString(
-    <ExploreView
-      initialData={{ items: [], nextCursor: null, unavailable: true }}
-      initialFilters={{
-        categories: Object.entries(CATEGORIES).map(([value, category]) => ({
-          value,
-          label: category.label,
-          count: null,
-        })),
-      }}
-    />,
-  );
+  const html = ExploreView({
+    initialData: { items: [], nextCursor: null, unavailable: true },
+    initialFilters: {
+      categories: Object.entries(CATEGORIES).map(([value, category]) => ({
+        value,
+        label: category.label,
+        count: null,
+      })),
+    },
+  }).value;
 
   for (const value of Object.keys(CATEGORIES)) {
     expect(html, value).toContain(`href="/${value}"`);
@@ -143,57 +131,51 @@ it('renders a zero total for a successful empty count, and nothing when it is un
   // empty corpus, while a null count means the count could not be read. `every`
   // on an empty array is vacuously true, so without the explicit empty case the
   // successful-empty corpus renders as "unknown" and loses its 0.
-  const succeeded = renderToString(
-    <ExploreView
-      initialData={{ items: [], nextCursor: null }}
-      initialFilters={{ categories: [] }}
-    />,
-  );
+  const succeeded = ExploreView({
+    initialData: { items: [], nextCursor: null },
+    initialFilters: { categories: [] },
+  }).value;
   expect(succeeded).toContain('All links');
   expect(succeeded).toMatch(/All links<\/span><span[^>]*>0<\/span>/);
 
-  const unknown = renderToString(
-    <ExploreView
-      initialData={{ items: [], nextCursor: null, unavailable: true }}
-      initialFilters={{
-        categories: [{ value: 'tools', label: 'Tools', count: null }],
-      }}
-    />,
-  );
+  const unknown = ExploreView({
+    initialData: { items: [], nextCursor: null, unavailable: true },
+    initialFilters: {
+      categories: [{ value: 'tools', label: 'Tools', count: null }],
+    },
+  }).value;
   expect(unknown).toMatch(/Tools<\/span><\/a>/);
 });
 
 it('keeps the looping thumbnail honest for assistive tech', () => {
   // The preview autoplays silently and offers no controls, so it must be
   // decorative: no name, no announcement, no preloading on metered silence.
-  const html = renderToString(
-    <ExploreView
-      initialData={{
-        items: [
-          {
-            id: 'v1',
-            title: 'Launch film',
-            description: '',
-            summary: '',
-            blurb: '',
-            url: 'https://o.doubao.com/',
-            imageUrl: 'https://cdn.example.com/hero_1080p_video.mp4',
-            isVideo: true,
-            imageWidth: 0,
-            imageHeight: 0,
-            sourceDomain: 'o.doubao.com',
-            publishedAt: 1789434835000,
-            category: 'tools',
-            tags: ['tools'],
-            qualityScore: 90,
-            freshnessScore: 100,
-          },
-        ],
-        nextCursor: null,
-      }}
-      initialFilters={{ categories: [] }}
-    />,
-  );
+  const html = ExploreView({
+    initialData: {
+      items: [
+        {
+          id: 'v1',
+          title: 'Launch film',
+          description: '',
+          summary: '',
+          blurb: '',
+          url: 'https://o.doubao.com/',
+          imageUrl: 'https://cdn.example.com/hero_1080p_video.mp4',
+          isVideo: true,
+          imageWidth: 0,
+          imageHeight: 0,
+          sourceDomain: 'o.doubao.com',
+          publishedAt: 1789434835000,
+          category: 'tools',
+          tags: ['tools'],
+          qualityScore: 90,
+          freshnessScore: 100,
+        },
+      ],
+      nextCursor: null,
+    },
+    initialFilters: { categories: [] },
+  }).value;
   // Assert on the video tag itself: a page-wide `aria-hidden` (the theme
   // switcher's icons have one too) would satisfy the loose form while the
   // preview stayed exposed to assistive tech.
@@ -206,14 +188,12 @@ it('keeps the looping thumbnail honest for assistive tech', () => {
 it('renders rail rows tall enough to tap', () => {
   // SC 2.5.8: pointer targets need 24 CSS px. py-1 on 11px caption text yields
   // ~21.75px rows; py-1.5 takes them to ~24px while the count stays tabbable.
-  const html = renderToString(
-    <ExploreView
-      initialData={{ items: [], nextCursor: null }}
-      initialFilters={{
-        categories: [{ value: 'tools', label: 'Tools', count: 1 }],
-      }}
-    />,
-  );
+  const html = ExploreView({
+    initialData: { items: [], nextCursor: null },
+    initialFilters: {
+      categories: [{ value: 'tools', label: 'Tools', count: 1 }],
+    },
+  }).value;
   // Asserted on the filter link itself: `min-h-7` also appears on the Grid and
   // List buttons (four of them, two per rail render site), so a page-wide match
   // stays green even if the rail rows lose it.
@@ -247,18 +227,16 @@ it('serves our own media route as a root-relative path', () => {
     freshnessScore: 60,
   });
 
-  const html = renderToString(
-    <ExploreView
-      initialData={{
-        items: [
-          feedImage('a', `${SITE_ORIGIN}/media/437e368b-c40c-4e02-8e06-2ca5bbcb8055`),
-          feedImage('b', 'https://images.ctfassets.net/a/b/photo.png'),
-        ],
-        nextCursor: null,
-      }}
-      initialFilters={{ categories: [] }}
-    />,
-  );
+  const html = ExploreView({
+    initialData: {
+      items: [
+        feedImage('a', `${SITE_ORIGIN}/media/437e368b-c40c-4e02-8e06-2ca5bbcb8055`),
+        feedImage('b', 'https://images.ctfassets.net/a/b/photo.png'),
+      ],
+      nextCursor: null,
+    },
+    initialFilters: { categories: [] },
+  }).value;
 
   expect(html).toContain('src="/media/437e368b-c40c-4e02-8e06-2ca5bbcb8055"');
   expect(html).not.toContain(`src="${SITE_ORIGIN}/media/`);
@@ -270,35 +248,33 @@ it('asks the publisher CDN for a card-sized image, keeping the original as a fal
   // Through the real renderer, so the transform is pinned where it is applied
   // rather than only in src/images.ts. The fallback attribute is what
   // src/scripts/board.ts retries with.
-  const html = renderToString(
-    <ExploreView
-      initialData={{
-        items: [
-          {
-            id: '1',
-            title: 'Story',
-            description: '',
-            summary: '',
-            blurb: '',
-            url: 'https://example.com/story',
-            // A host whose convention was measured (1241 KB -> 58 KB).
-            imageUrl: 'https://images.ctfassets.net/a/b/photo.png',
-            isVideo: false,
-            imageWidth: 0,
-            imageHeight: 0,
-            sourceDomain: 'example.com',
-            publishedAt: 1786080856000,
-            category: 'tools',
-            tags: ['tools'],
-            qualityScore: 82,
-            freshnessScore: 60,
-          },
-        ],
-        nextCursor: null,
-      }}
-      initialFilters={{ categories: [] }}
-    />,
-  );
+  const html = ExploreView({
+    initialData: {
+      items: [
+        {
+          id: '1',
+          title: 'Story',
+          description: '',
+          summary: '',
+          blurb: '',
+          url: 'https://example.com/story',
+          // A host whose convention was measured (1241 KB -> 58 KB).
+          imageUrl: 'https://images.ctfassets.net/a/b/photo.png',
+          isVideo: false,
+          imageWidth: 0,
+          imageHeight: 0,
+          sourceDomain: 'example.com',
+          publishedAt: 1786080856000,
+          category: 'tools',
+          tags: ['tools'],
+          qualityScore: 82,
+          freshnessScore: 60,
+        },
+      ],
+      nextCursor: null,
+    },
+    initialFilters: { categories: [] },
+  }).value;
 
   expect(html).toContain(
     'src="https://images.ctfassets.net/a/b/photo.png?w=900&amp;fm=webp&amp;q=75"',
@@ -311,12 +287,10 @@ it('renders the layout and theme controls with the rail, not in a toolbar', () =
   // at its foot so they exist in both places it renders — the desktop column
   // and the mobile disclosure. One copy would strand them on the other side of
   // the `lg` breakpoint; a toolbar would put them back above the board.
-  const html = renderToString(
-    <ExploreView
-      initialData={{ items: [], nextCursor: null }}
-      initialFilters={{ categories: [] }}
-    />,
-  );
+  const html = ExploreView({
+    initialData: { items: [], nextCursor: null },
+    initialFilters: { categories: [] },
+  }).value;
 
   expect(html.match(/aria-label="Theme"/g)).toHaveLength(2);
   expect(html.match(/>Grid</g)).toHaveLength(2);
@@ -358,17 +332,15 @@ it('loads only the first cards eagerly, at high priority', () => {
     freshnessScore: 60,
   }));
 
-  const html = renderToString(
-    <ExploreView initialData={{ items, nextCursor: null }} initialFilters={{ categories: [] }} />,
-  );
+  const html = ExploreView({
+    initialData: { items, nextCursor: null },
+    initialFilters: { categories: [] },
+  }).value;
 
   const eager = html.match(/loading="eager"/g) ?? [];
   const lazy = html.match(/loading="lazy"/g) ?? [];
-  // Lowercase, and exact: React 18 warns on the camelCase `fetchPriority` prop
-  // (React 19 accepts it), so the attribute is spread in lowercase — which this
-  // asserts, because a regression to the camelCase spelling reintroduces an
-  // error-level line in `astro dev` and only *happens* to work in a browser,
-  // whose HTML parser lowercases attribute names.
+  // Lowercase and exact: a camelCase spelling would only *happen* to work in a
+  // browser, whose HTML parser lowercases attribute names.
   const high = html.match(/fetchpriority="high"/g) ?? [];
   expect(high).toHaveLength(ABOVE_THE_FOLD_CARDS);
   expect(eager).toHaveLength(ABOVE_THE_FOLD_CARDS);
@@ -384,4 +356,41 @@ it('loads only the first cards eagerly, at high priority', () => {
   const lastEager = html.lastIndexOf('loading="eager"');
   expect(lastEager).toBeLessThan(firstLazy);
   expect(html.indexOf('fetchpriority="high"')).toBeLessThan(firstLazy);
+});
+
+it('escapes feed text in the page exactly as in the appended fragment', () => {
+  // The page and /cards.json share one card function; this pins the page side
+  // of the escaping contract that React used to own (exploreCards.test.ts pins
+  // the fragment side). The cursor is in here too: it carries an article id.
+  const html = ExploreView({
+    initialData: {
+      items: [
+        {
+          id: 'x',
+          title: '<script>alert(1)</script>',
+          description: '',
+          summary: '',
+          blurb: '',
+          url: 'https://example.com/a?b=1&c=2',
+          imageUrl: '',
+          isVideo: false,
+          imageWidth: 0,
+          imageHeight: 0,
+          sourceDomain: 'x" onmouseover="alert(3)',
+          publishedAt: 1786080856000,
+          category: 'tools',
+          tags: [],
+          qualityScore: 82,
+          freshnessScore: 60,
+        },
+      ],
+      nextCursor: '"><script>alert(4)</script>',
+    },
+    initialFilters: { categories: [] },
+  }).value;
+  expect(html).not.toContain('<script>');
+  expect(html).not.toContain('" onmouseover="');
+  expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+  expect(html).toContain('href="https://example.com/a?b=1&amp;c=2"');
+  expect(html).toContain('data-cursor="&quot;&gt;&lt;script&gt;alert(4)&lt;/script&gt;"');
 });

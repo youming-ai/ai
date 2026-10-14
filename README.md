@@ -22,7 +22,7 @@
 
 ## Tech stack
 
-Astro 7 + React islands · Cloudflare Workers (workerd) · D1 + KV · Tailwind · Vitest · Biome · Bun
+Astro 7, server-rendered with no UI framework · Cloudflare Workers (workerd) · D1 + KV · Tailwind · Vitest · Biome · Bun
 
 ## Prerequisites
 
