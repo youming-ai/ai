@@ -36,7 +36,7 @@ graph TD
 - `migrations/` — D1 schema (0001–0017). Applied by `bun run deploy`, never automatically. A migration the code depends on (a new column it selects) has to be applied *before* the deploy that reads it.
 - `worker/entrypoint.ts` — the deployed handler. `fetch` answers `/media/*` itself and hands everything else to Astro; `scheduled` runs ingest, then curation, then the sweep (told apart by `controller.cron`). `worker/index.ts` is the `/api/*` dispatcher (explore endpoints, then an explicit 404) and is only reachable through `src/pages/api/[...route].ts`.
 - `src/media.ts` — rewrites feed-CDN images onto our own origin and serves them at `/media/<storage-id>`. See Gotchas.
-- `design-tokens/` — W3C design-tokens JSON; `src/index.css` and `tailwind.config.js` map to it.
+- `design-tokens/` — W3C design-tokens JSON; `src/index.css` and `tailwind.config.js` map to it. The accent is the brand violet `#5200ff` in the light theme only: on the dark ground it is ~2.6:1, so dark uses it mixed 1:1 with white (`#a980ff`), and `index.css.test.ts` holds both themes to 4.5:1 where the accent renders.
 
 ## Development Commands
 

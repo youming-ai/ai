@@ -45,7 +45,7 @@ const canonicalUrl = `${SITE_ORIGIN}${canonicalPath}`;
     <!-- Server-rendered default so the tag is never empty for a crawler or a
         no-JS visitor: it mirrors --c-bg for the default (dark) theme, and the
         inline script below re-syncs it whenever the theme changes. -->
-    <meta name="theme-color" content="rgb(10 14 12)" />
+    <meta name="theme-color" content="rgb(12 12 18)" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title}</title>
     <meta name="description" content={description} />
@@ -96,7 +96,7 @@ const canonicalUrl = `${SITE_ORIGIN}${canonicalPath}`;
           }
         })();
         const theme = choice === 'light' ? 'light' : 'dark';
-        const candidates = { dark: 'rgb(10 14 12)', light: 'rgb(244 247 245)' };
+        const candidates = { dark: 'rgb(12 12 18)', light: 'rgb(245 246 251)' };
         document.documentElement.dataset.theme = theme;
         document
           .querySelector('meta[name="theme-color"]')
