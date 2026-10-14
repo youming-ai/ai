@@ -5,9 +5,9 @@ export const SITE_ORIGIN = 'https://ai.um1ng.me';
 
 // Brand-facing copy. Single source of truth: the layout <title>/description
 // defaults and the RSS channel description import from here, so a rebrand
-// or positioning change edits one file, not three. The desk has no brand name
-// of its own any more, so its name is what it is.
-export const SITE_NAME = 'AI hardware desk';
+// or positioning change edits one file, not three. The title is the name
+// alone; the description says what the desk covers.
+export const SITE_NAME = 'AI Desk';
 export const SITE_TITLE = SITE_NAME;
 /** What every fetch the desk makes calls itself: ingest, and every probe in
  *  scripts/, which must be answered the way ingest is. The product token is the

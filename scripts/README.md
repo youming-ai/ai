@@ -74,7 +74,7 @@ that do not, and are served 1:1. That residue is issue #158.
   stable; production cards load third-party images measured in megabytes. LCP in
   production is therefore governed by image delivery, not by anything in the
   table above. The numbers here were taken with the old 74,993-byte card; the
-  rebrand replaced it with a 46,812-byte one, so image bytes from a run today
+  rebrand replaced it with a 41,685-byte one, so image bytes from a run today
   are not comparable with them.
 - **Real devices and networks.** The throttle profiles are approximations, and
   local loopback removes the TLS and RTT costs a real visitor pays.

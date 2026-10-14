@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This repo is an AI-hardware desk. A Cloudflare cron pulls a registry of hardware and AI-industry RSS feeds every 15 minutes into D1, then a model *curates* the new rows — category, tags, summary, blurb, article type, quality score, and an on-beat gate — and an Astro SSR app renders the corpus as a full-bleed masonry board with a category index.
+This repo is **AI Desk**, an AI-hardware desk. A Cloudflare cron pulls a registry of hardware and AI-industry RSS feeds every 15 minutes into D1, then a model *curates* the new rows — category, tags, summary, blurb, article type, quality score, and an on-beat gate — and an Astro SSR app renders the corpus as a full-bleed masonry board with a category index.
 
 2026 pivots: football → PC hardware → full tech → a Poche-RSS curated explore feed (every external LLM dependency removed) → **this** desk, which brings the model back deliberately, as the classifier rather than as a thin summarizer. The Poche source left the registry in the same change; its corpus stays published as the archive.
 

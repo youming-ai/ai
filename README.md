@@ -1,4 +1,4 @@
-# AI hardware desk
+# AI Desk
 
 > AI-hardware desk on Cloudflare Workers. A cron pulls a registry of hardware and AI-industry RSS feeds into D1, a model curates every new story (category, tags, summary, blurb, quality score, on-beat gate), and Astro renders the result as a fast masonry board with category hubs and RSS feeds.
 
