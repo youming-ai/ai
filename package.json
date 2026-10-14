@@ -47,7 +47,6 @@
     "@cloudflare/workers-types": "latest",
     "@tailwindcss/vite": "latest",
     "@testing-library/dom": "latest",
-    "@testing-library/jest-dom": "latest",
     "@types/node": "latest",
     "jsdom": "latest",
     "tailwindcss": "latest",

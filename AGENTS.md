@@ -104,7 +104,7 @@ Bun locally, `workerd` in production.
 
 ## Testing & QA
 
-Vitest 5, `jsdom`, `globals: true`, `fileParallelism: false` (tests mutate global fetch and location). `src/test-setup.ts` imports jest-dom and `afterEach(vi.restoreAllMocks())`. Files needing node/workerd semantics carry `// @vitest-environment node` as the first directive, including `worker/index.test.ts` (where the workers-types reference precedes it).
+Vitest 5, `jsdom`, `globals: true`, `fileParallelism: false` (tests mutate global fetch and location). `src/test-setup.ts` runs `afterEach(vi.restoreAllMocks())`; assertions are plain Vitest matchers. Files needing node/workerd semantics carry `// @vitest-environment node` as the first directive, including `worker/index.test.ts` (where the workers-types reference precedes it).
 
 Patterns:
 - `ssr.test.ts` renders the board in the node environment (no `document`, like workerd) and pins the escaping contract on the page; `exploreCards.test.ts` pins it on the `/cards.json` fragment. `board.test.ts` mounts the same markup with `innerHTML` and drives `board.ts` against it.
