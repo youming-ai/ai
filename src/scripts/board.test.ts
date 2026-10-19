@@ -45,6 +45,12 @@ function feed(items: ExploreArticle[], nextCursor: string | null): ExploreFeed {
   return { items, nextCursor };
 }
 
+/** The icon's computed display — `style.display` is how the script shows and
+ *  hides it, since `hidden` is not a property of SVG elements. */
+function iconDisplay(button: Element, theme: 'dark' | 'light'): string {
+  return (button.querySelector(`[data-theme-icon="${theme}"]`) as SVGElement).style.display;
+}
+
 /** IntersectionObserver callbacks, so a test can fire the scroll path. */
 let observers: Array<(entries: Array<{ isIntersecting: boolean }>) => void> = [];
 
@@ -476,21 +482,19 @@ describe('board appends the next page', () => {
 describe('theme', () => {
   it.each([true, false])('defaults to the system preference (light: %s)', async (light) => {
     stubMatchMedia(false, light);
-    const { container } = render(
+    render(
       ExploreView({
         initialData: feed([card('a', 'story')], null),
         initialFilters: { categories: [] },
       }),
     );
     await startBoard();
+
     expect(document.documentElement.dataset.theme).toBe(light ? 'light' : 'dark');
-    const selects = container.querySelectorAll('select');
-    expect(selects).toHaveLength(2);
-    for (const select of selects) expect(select.value).toBe('system');
     expect(localStorage.getItem('theme')).toBeNull();
   });
 
-  it('follows system changes, allows manual override, and can return to System', async () => {
+  it('follows system changes until the reader manually chooses a theme', async () => {
     let onChange = () => {};
     const system = {
       matches: true,
@@ -511,46 +515,50 @@ describe('theme', () => {
     onChange();
     expect(document.documentElement.dataset.theme).toBe('dark');
 
-    const selects = container.querySelectorAll('select');
-    fireEvent.change(selects[0]!, { target: { value: 'light' } });
-    expect(document.documentElement.dataset.theme).toBe('light');
-    expect(selects[1]!.value).toBe('light');
-    expect(localStorage.getItem('theme')).toBe('light');
-    onChange();
-    expect(document.documentElement.dataset.theme).toBe('light');
-
-    fireEvent.change(selects[1]!, { target: { value: 'system' } });
-    expect(document.documentElement.dataset.theme).toBe('dark');
-    expect(selects[0]!.value).toBe('system');
-    expect(localStorage.getItem('theme')).toBeNull();
+    fireEvent.click(container.querySelector('[data-theme-toggle]')!);
     system.matches = true;
     onChange();
+    system.matches = false;
+    onChange();
     expect(document.documentElement.dataset.theme).toBe('light');
+    expect(localStorage.getItem('theme')).toBe('light');
   });
 
-  it.each(['light', 'dark'])(
-    'adopts a persisted %s theme over the system preference',
-    async (theme) => {
-      stubMatchMedia(false, theme === 'dark');
-      localStorage.setItem('theme', theme);
-      render(
-        ExploreView({
-          initialData: feed([card('a', 'story')], null),
-          initialFilters: { categories: [] },
-        }),
-      );
-      await startBoard();
-      expect(document.documentElement.dataset.theme).toBe(theme);
-      for (const select of document.querySelectorAll('select')) {
-        expect(select.value).toBe(theme);
-      }
-    },
-  );
+  it('applies the stored choice and keeps both rail instances in step', async () => {
+    const { container } = render(
+      ExploreView({
+        initialData: feed([card('a', 'story')], null),
+        initialFilters: { categories: [] },
+      }),
+    );
+    await startBoard();
 
-  it('switches theme when saving the preference is unavailable', async () => {
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('blocked');
-    });
+    const buttons = Array.from(container.querySelectorAll('[data-theme-toggle]'));
+    expect(buttons).toHaveLength(2);
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    for (const button of buttons) {
+      expect(button.getAttribute('aria-label')).toBe('Dark theme');
+      // The icon the server could not choose is revealed by the script — via
+      // style, because `hidden` is an HTML attribute and these are SVGs (the
+      // first implementation wrote `icon.hidden`, which silently did nothing).
+      expect(iconDisplay(button, 'dark')).not.toBe('none');
+      expect(iconDisplay(button, 'light')).toBe('none');
+    }
+
+    fireEvent.click(buttons[0]!);
+
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(localStorage.getItem('theme')).toBe('light');
+    // Both instances, not only the one that was clicked: they render in the
+    // desktop column and the mobile disclosure, and only one is ever visible.
+    for (const button of buttons) {
+      expect(button.getAttribute('aria-label')).toBe('Light theme');
+      expect(iconDisplay(button, 'light')).not.toBe('none');
+    }
+  });
+
+  it('adopts a persisted light theme on load', async () => {
+    localStorage.setItem('theme', 'light');
     render(
       ExploreView({
         initialData: feed([card('a', 'story')], null),
@@ -558,10 +566,11 @@ describe('theme', () => {
       }),
     );
     await startBoard();
-    fireEvent.change(document.querySelector('[data-theme-select]')!, {
-      target: { value: 'light' },
-    });
+
     expect(document.documentElement.dataset.theme).toBe('light');
+    expect(document.querySelector('[data-theme-toggle]')?.getAttribute('aria-label')).toBe(
+      'Light theme',
+    );
   });
 });
 
