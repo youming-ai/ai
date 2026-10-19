@@ -55,6 +55,20 @@ describe('parseRss', () => {
     ]);
   });
 
+  it('strips entity-escaped markup from an Atom html body', () => {
+    const articles = parseRss(
+      `<feed><entry>
+        <title>croft</title>
+        <link rel="alternate" type="text/html" href="https://www.producthunt.com/products/croft"/>
+        <content type="html">&lt;p&gt; Data pipelines in TypeScript &lt;/p&gt;
+          &lt;p&gt;&lt;a href="https://x.test/?a=1&amp;amp;b=2"&gt;Discussion&lt;/a&gt; | Use &amp;lt;dialog&amp;gt;&lt;/p&gt;</content>
+      </entry></feed>`,
+      source,
+      Date.parse('2026-08-05T12:00:00Z'),
+    );
+    expect(articles[0]?.description).toBe('Data pipelines in TypeScript Discussion | Use <dialog>');
+  });
+
   it('preserves escaped angle brackets in a title as text', () => {
     const articles = parseRss(
       `<rss><channel><item>
