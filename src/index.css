@@ -151,6 +151,13 @@
     @apply bg-night text-chalk font-body antialiased;
   }
 
+  /* Tailwind 4 resets buttons to the platform's default cursor; this board's
+     buttons (the theme control) kept v3's pointer. */
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+
   :focus-visible {
     outline: 2px solid rgb(var(--c-pitch));
     outline-offset: 2px;
@@ -241,6 +248,28 @@
   .ds-signal::after {
     width: var(--signal, 0%);
     background: rgb(var(--signal-accent, var(--c-pitch)));
+  }
+}
+
+/* Tactile press feedback for any pressable (buttons, tabs, cards). Scoped
+   transition (never `all`) covering hover colors + the press scale. A utility
+   rather than a component class so it composes with any element's classes. */
+@utility ds-press {
+  transition:
+    transform 150ms var(--ease-out),
+    color 150ms var(--ease-out),
+    background-color 150ms var(--ease-out),
+    border-color 150ms var(--ease-out),
+    box-shadow 150ms var(--ease-out),
+    opacity 150ms var(--ease-out),
+    filter 150ms var(--ease-out);
+  &:active {
+    transform: scale(0.97);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &:active {
+      transform: none;
+    }
   }
 }
 

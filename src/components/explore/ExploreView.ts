@@ -21,12 +21,23 @@ export type ViewMode = 'grid' | 'list';
 
 const SKELETON_CARD = html`<div class="h-56 animate-pulse rounded-card bg-overlay/5"></div>`;
 
-/** Native select keeps all three preferences available to keyboard and touch users. */
-const THEME_SELECT = html`<select data-theme-select="true" aria-label="Theme" class="min-h-11 w-20 shrink-0 border border-line/40 bg-panel px-1 text-xs text-chalk">
-  <option value="system">System</option>
-  <option value="light">Light</option>
-  <option value="dark">Dark</option>
-</select>`;
+/** The theme control. The markup ships both icons hidden and no label beyond
+ *  "Theme", and `src/scripts/board.ts` reveals the right one after paint: the
+ *  rail renders this control twice (desktop column and mobile disclosure), and
+ *  `data-theme` on the root element is the one source of truth for both, which
+ *  the inline script in Layout.astro reads as well. Showing an icon from the
+ *  server would be a guess until the script runs; hiding them keeps the
+ *  button's box (min-w/min-h) stable meanwhile. Inline moon/sun (lucide paths):
+ *  two icons don't justify a dependency. */
+const THEME_TOGGLE = html`<button type="button" data-theme-toggle="true" aria-label="Theme" title="Theme" class="flex min-h-9 min-w-9 items-center justify-center rounded-pill text-chalkdim transition-colors hover:bg-overlay/10 hover:text-chalk ds-press">
+  <svg data-theme-icon="dark" style="display:none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4" aria-hidden="true">
+    <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+  </svg>
+  <svg data-theme-icon="light" style="display:none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4" aria-hidden="true">
+    <circle cx="12" cy="12" r="4"></circle>
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
+  </svg>
+</button>`;
 
 /** One category link in the rail. */
 function filterRow(label: string, count: number | null, active: boolean, href: string): Html {
@@ -158,7 +169,7 @@ export default function ExploreView({
           html`<a href="?view=${view}"${attr('aria-current', initialView === view && 'true')} class="ds-seg-tab min-h-9 px-2.5 text-xs ${initialView === view ? 'ds-seg-tab-active' : 'ds-seg-tab-inactive'}">${view === 'grid' ? 'Grid' : 'List'}</a>`,
       )}
     </nav>
-    ${THEME_SELECT}
+    ${THEME_TOGGLE}
   </div>`;
 
   // h-screen, not 100vh minus a bar: there is no bar any more. The rail scrolls

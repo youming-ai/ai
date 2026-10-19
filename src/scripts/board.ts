@@ -135,40 +135,67 @@ function initAppend(board: HTMLElement): void {
  *  also what the inline script in Layout.astro reads to keep the theme-color
  *  meta tag in step. */
 function initTheme(): void {
-  const selects = Array.from(document.querySelectorAll('select')).filter((select) =>
-    select.hasAttribute('data-theme-select'),
-  );
-  if (selects.length === 0) return;
+  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-theme-toggle]'));
+  if (buttons.length === 0) return;
 
   const root = document.documentElement;
-  const systemTheme = window.matchMedia('(prefers-color-scheme: light)');
-  let choice: 'system' | 'light' | 'dark' = 'system';
-  try {
-    const stored = localStorage.getItem('theme');
-    if (stored === 'light' || stored === 'dark') choice = stored;
-  } catch {
-    /* private mode / storage disabled */
-  }
-
-  const apply = (): void => {
-    root.dataset.theme = choice === 'system' ? (systemTheme.matches ? 'light' : 'dark') : choice;
-    for (const select of selects) select.value = choice;
+  const stored = (): string | null => {
+    try {
+      return localStorage.getItem('theme');
+    } catch {
+      return null; // private mode / storage disabled
+    }
   };
-  apply();
+  const systemTheme = window.matchMedia('(prefers-color-scheme: light)');
+  const choice = stored();
+  let manualChoice: 'light' | 'dark' | null =
+    choice === 'light' || choice === 'dark' ? choice : null;
+  const preferred = (): 'dark' | 'light' =>
+    manualChoice ?? (systemTheme.matches ? 'light' : 'dark');
+  const current = (): 'dark' | 'light' => {
+    const applied = root.dataset.theme;
+    if (applied === 'dark' || applied === 'light') return applied;
+    return preferred();
+  };
+
+  const paint = (): void => {
+    const theme = current();
+    const label = theme === 'dark' ? 'Dark theme' : 'Light theme';
+    for (const button of buttons) {
+      button.setAttribute('aria-label', label);
+      button.title = label;
+      for (const icon of button.querySelectorAll<SVGElement>('[data-theme-icon]')) {
+        // `style.display`, not the `hidden` attribute or `icon.hidden`: `hidden`
+        // is defined for HTML elements, React's SVG props reject it, and on an
+        // SVG the IDL property does not exist at all — assigning it sets a
+        // plain JS field and the icon never appears. (board.test.tsx pins it.)
+        icon.style.display = icon.getAttribute('data-theme-icon') === theme ? '' : 'none';
+      }
+    }
+  };
+
+  // Match the pre-paint script: use a saved choice or the system preference.
+  const initial = preferred();
+  if (root.dataset.theme !== initial) root.dataset.theme = initial;
+  paint();
+  new MutationObserver(paint).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
   systemTheme.addEventListener('change', () => {
-    if (choice === 'system') apply();
+    if (manualChoice) return;
+    root.dataset.theme = preferred();
+    paint();
   });
 
-  for (const select of selects) {
-    select.addEventListener('change', () => {
-      choice = select.value === 'light' || select.value === 'dark' ? select.value : 'system';
+  for (const button of buttons) {
+    button.addEventListener('click', () => {
+      const next = current() === 'light' ? 'dark' : 'light';
+      manualChoice = next;
       try {
-        if (choice === 'system') localStorage.removeItem('theme');
-        else localStorage.setItem('theme', choice);
+        localStorage.setItem('theme', next);
       } catch {
         /* private mode / storage disabled */
       }
-      apply();
+      root.dataset.theme = next;
+      paint();
     });
   }
 }
