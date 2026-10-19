@@ -9,6 +9,7 @@ import { fireEvent, waitFor } from '@testing-library/dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ExploreView from '../components/explore/ExploreView';
 import type { Html } from '../components/html';
+import { renderExploreCards } from '../data/exploreCards';
 import type { ExploreArticle, ExploreFeed } from '../types';
 
 /** Mounts the server-rendered board the way the browser receives it. */
@@ -42,12 +43,6 @@ function card(id: string, title: string, isVideo = false): ExploreArticle {
 
 function feed(items: ExploreArticle[], nextCursor: string | null): ExploreFeed {
   return { items, nextCursor };
-}
-
-/** The icon's computed display — `style.display` is how the script shows and
- *  hides it, since `hidden` is not a property of SVG elements. */
-function iconDisplay(button: Element, theme: 'dark' | 'light'): string {
-  return (button.querySelector(`[data-theme-icon="${theme}"]`) as SVGElement).style.display;
 }
 
 /** IntersectionObserver callbacks, so a test can fire the scroll path. */
@@ -140,6 +135,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  window.dispatchEvent(new Event('pagehide'));
+  vi.useRealTimers();
   for (const name of MEDIA_METHODS) {
     const descriptor = originalDescriptors.get(name);
     if (descriptor) {
@@ -154,19 +151,41 @@ afterEach(() => {
 });
 
 describe('board appends the next page', () => {
+  it.each(['grid', 'list'] as const)('uses %s placeholders matching the active layout', (view) => {
+    const { container } = render(
+      ExploreView({
+        initialData: feed([card('a', 'story')], 'cur-1'),
+        initialFilters: { categories: [] },
+        initialView: view,
+      }),
+    );
+    const loading = container.querySelector<HTMLElement>('[data-board-loading]')!;
+    expect(loading.hidden).toBe(true);
+    const placeholders = loading.querySelector('[aria-hidden="true"]')!;
+    expect(placeholders.children).toHaveLength(view === 'list' ? 3 : 4);
+    expect(placeholders.classList.contains('grid')).toBe(view === 'grid');
+  });
+
   it.each(['grid', 'list'] as const)(
     'continues scrolling in %s when the sentinel stays in range after an append',
     async (view) => {
-      const tag = view === 'list' ? 'li' : 'article';
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(
           new Response(
-            JSON.stringify({ html: `<${tag}>second story</${tag}>`, nextCursor: 'cur-2' }),
+            JSON.stringify({
+              html: renderExploreCards([card('b', 'second story')], view),
+              nextCursor: 'cur-2',
+            }),
           ),
         )
         .mockResolvedValueOnce(
-          new Response(JSON.stringify({ html: `<${tag}>last story</${tag}>`, nextCursor: null })),
+          new Response(
+            JSON.stringify({
+              html: renderExploreCards([card('c', 'last story')], view),
+              nextCursor: null,
+            }),
+          ),
         );
       vi.stubGlobal('fetch', fetchMock);
       // A new observation reports the current intersection even when the
@@ -181,12 +200,24 @@ describe('board appends the next page', () => {
           initialView: view,
         }),
       );
+      const board = container.querySelector('[data-board]')!;
+      const firstPage = board.firstElementChild!;
+      const originalCards = Array.from(firstPage.children);
       await startBoard();
 
       await waitFor(() => {
         expect(container.querySelector('[data-board]')?.textContent).toContain('last story');
       });
       expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(board.firstElementChild).toBe(firstPage);
+      // Existing pages retain their own column formatting context. New pages
+      // must be siblings, so appending cannot rebalance the original page.
+      if (view === 'grid') {
+        expect(board.querySelectorAll(':scope > [data-board-page]')).toHaveLength(3);
+        expect(Array.from(firstPage.children)).toEqual(originalCards);
+      } else {
+        expect(board.querySelectorAll(':scope > li')).toHaveLength(3);
+      }
       expect(container.querySelector('[data-board-more]')).toBeNull();
       expect(String(fetchMock.mock.calls[1]?.[0])).toContain('cursor=cur-2');
       expect(String(fetchMock.mock.calls[1]?.[0])).toContain(`view=${view}`);
@@ -303,20 +334,15 @@ describe('board appends the next page', () => {
     expect(note!.textContent).toContain('End of the feed');
   });
 
-  it('retries the same page when scrolling back into range after a failure', async () => {
+  it('automatically retries the same cursor after a temporary failure', async () => {
+    vi.useFakeTimers();
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(new Response('nope', { status: 502 }))
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ html: '<article>second story</article>', nextCursor: null }),
-          {
-            status: 200,
-          },
-        ),
+        new Response(JSON.stringify({ html: '<article>second story</article>', nextCursor: null })),
       );
     vi.stubGlobal('fetch', fetchMock);
-
     const { container } = render(
       ExploreView({
         initialData: feed([card('a', 'first story')], 'cur-1'),
@@ -324,20 +350,61 @@ describe('board appends the next page', () => {
       }),
     );
     await startBoard();
-
     observers.at(-1)?.([{ isIntersecting: true }]);
-    await waitFor(() =>
-      expect(container.querySelector<HTMLElement>('[data-board-error]')?.hidden).toBe(false),
-    );
-
+    await vi.advanceTimersByTimeAsync(0);
+    expect(container.querySelector('[data-board-error]')?.textContent).toContain('Retrying');
+    // Repeated intersections during the delay must not bypass the backoff.
     observers.at(-1)?.([{ isIntersecting: true }]);
-
-    await waitFor(() => {
-      expect(container.querySelector('[data-board]')?.innerHTML).toContain('second story');
-    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(2000);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    // And the error the reader was shown is cleared by the successful retry.
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(fetchMock.mock.calls[1]?.[0]);
+    expect(container.querySelector('[data-board]')?.textContent).toContain('second story');
     expect(container.querySelector<HTMLElement>('[data-board-error]')?.hidden).toBe(true);
+  });
+
+  it('stops retrying after two retries and waits for another scroll or connection recovery', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async () => new Response('nope', { status: 502 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { container } = render(
+      ExploreView({
+        initialData: feed([card('a', 'first story')], 'cur-1'),
+        initialFilters: { categories: [] },
+      }),
+    );
+    await startBoard();
+    observers.at(-1)?.([{ isIntersecting: true }]);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(container.querySelector('[data-board-error]')?.textContent).toContain('Scroll away');
+    expect(container.querySelector('[data-board]')?.textContent).toContain('first story');
+    window.dispatchEvent(new Event('online'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it('does not retry off-screen or after leaving the page', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async () => new Response('nope', { status: 502 }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      ExploreView({
+        initialData: feed([card('a', 'first story')], 'cur-1'),
+        initialFilters: { categories: [] },
+      }),
+    );
+    await startBoard();
+    observers.at(-1)?.([{ isIntersecting: true }]);
+    await vi.advanceTimersByTimeAsync(0);
+    observers.at(-1)?.([{ isIntersecting: false }]);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    observers.at(-1)?.([{ isIntersecting: true }]);
+    await vi.advanceTimersByTimeAsync(0);
+    window.dispatchEvent(new Event('pagehide'));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('keeps the page and reports the failure when a page cannot be fetched', async () => {
@@ -409,19 +476,21 @@ describe('board appends the next page', () => {
 describe('theme', () => {
   it.each([true, false])('defaults to the system preference (light: %s)', async (light) => {
     stubMatchMedia(false, light);
-    render(
+    const { container } = render(
       ExploreView({
         initialData: feed([card('a', 'story')], null),
         initialFilters: { categories: [] },
       }),
     );
     await startBoard();
-
     expect(document.documentElement.dataset.theme).toBe(light ? 'light' : 'dark');
+    const selects = container.querySelectorAll('select');
+    expect(selects).toHaveLength(2);
+    for (const select of selects) expect(select.value).toBe('system');
     expect(localStorage.getItem('theme')).toBeNull();
   });
 
-  it('follows system changes until the reader manually chooses a theme', async () => {
+  it('follows system changes, allows manual override, and can return to System', async () => {
     let onChange = () => {};
     const system = {
       matches: true,
@@ -442,50 +511,46 @@ describe('theme', () => {
     onChange();
     expect(document.documentElement.dataset.theme).toBe('dark');
 
-    fireEvent.click(container.querySelector('[data-theme-toggle]')!);
+    const selects = container.querySelectorAll('select');
+    fireEvent.change(selects[0]!, { target: { value: 'light' } });
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(selects[1]!.value).toBe('light');
+    expect(localStorage.getItem('theme')).toBe('light');
+    onChange();
+    expect(document.documentElement.dataset.theme).toBe('light');
+
+    fireEvent.change(selects[1]!, { target: { value: 'system' } });
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    expect(selects[0]!.value).toBe('system');
+    expect(localStorage.getItem('theme')).toBeNull();
     system.matches = true;
     onChange();
-    system.matches = false;
-    onChange();
     expect(document.documentElement.dataset.theme).toBe('light');
-    expect(localStorage.getItem('theme')).toBe('light');
   });
 
-  it('applies the stored choice and keeps both rail instances in step', async () => {
-    const { container } = render(
-      ExploreView({
-        initialData: feed([card('a', 'story')], null),
-        initialFilters: { categories: [] },
-      }),
-    );
-    await startBoard();
+  it.each(['light', 'dark'])(
+    'adopts a persisted %s theme over the system preference',
+    async (theme) => {
+      stubMatchMedia(false, theme === 'dark');
+      localStorage.setItem('theme', theme);
+      render(
+        ExploreView({
+          initialData: feed([card('a', 'story')], null),
+          initialFilters: { categories: [] },
+        }),
+      );
+      await startBoard();
+      expect(document.documentElement.dataset.theme).toBe(theme);
+      for (const select of document.querySelectorAll('select')) {
+        expect(select.value).toBe(theme);
+      }
+    },
+  );
 
-    const buttons = Array.from(container.querySelectorAll('[data-theme-toggle]'));
-    expect(buttons).toHaveLength(2);
-    expect(document.documentElement.dataset.theme).toBe('dark');
-    for (const button of buttons) {
-      expect(button.getAttribute('aria-label')).toBe('Dark theme');
-      // The icon the server could not choose is revealed by the script — via
-      // style, because `hidden` is an HTML attribute and these are SVGs (the
-      // first implementation wrote `icon.hidden`, which silently did nothing).
-      expect(iconDisplay(button, 'dark')).not.toBe('none');
-      expect(iconDisplay(button, 'light')).toBe('none');
-    }
-
-    fireEvent.click(buttons[0]!);
-
-    expect(document.documentElement.dataset.theme).toBe('light');
-    expect(localStorage.getItem('theme')).toBe('light');
-    // Both instances, not only the one that was clicked: they render in the
-    // desktop column and the mobile disclosure, and only one is ever visible.
-    for (const button of buttons) {
-      expect(button.getAttribute('aria-label')).toBe('Light theme');
-      expect(iconDisplay(button, 'light')).not.toBe('none');
-    }
-  });
-
-  it('adopts a persisted light theme on load', async () => {
-    localStorage.setItem('theme', 'light');
+  it('switches theme when saving the preference is unavailable', async () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
     render(
       ExploreView({
         initialData: feed([card('a', 'story')], null),
@@ -493,15 +558,28 @@ describe('theme', () => {
       }),
     );
     await startBoard();
-
+    fireEvent.change(document.querySelector('[data-theme-select]')!, {
+      target: { value: 'light' },
+    });
     expect(document.documentElement.dataset.theme).toBe('light');
-    expect(document.querySelector('[data-theme-toggle]')?.getAttribute('aria-label')).toBe(
-      'Light theme',
-    );
   });
 });
 
 describe('card media', () => {
+  it('collapses an image frame when the image failed before the script started', async () => {
+    const { container } = render(
+      ExploreView({
+        initialData: feed([card('a', 'story')], null),
+        initialFilters: { categories: [] },
+      }),
+    );
+    const image = container.querySelector('img')!;
+    vi.spyOn(image, 'complete', 'get').mockReturnValue(true);
+    vi.spyOn(image, 'naturalWidth', 'get').mockReturnValue(0);
+    await startBoard();
+    expect(container.querySelector<HTMLElement>('[data-image-frame]')!.style.display).toBe('none');
+  });
+
   it('plays a video preview when motion is allowed', async () => {
     stubMatchMedia(false);
     const { play } = stubPlayback();
@@ -594,7 +672,7 @@ describe('card media', () => {
     const appended = container.querySelector<HTMLImageElement>('img[src="/broken.png"]');
     expect(appended).not.toBeNull();
     appended!.dispatchEvent(new Event('error'));
-    expect(appended!.style.display).toBe('none');
+    expect(appended!.closest<HTMLElement>('[data-image-frame]')!.style.display).toBe('none');
 
     // And the appended video preview is started, not left as a dark box.
     const video = container.querySelector<HTMLVideoElement>('video[data-card-media]');
@@ -617,7 +695,7 @@ describe('card media', () => {
     expect(image).not.toBeNull();
     image!.dispatchEvent(new Event('error'));
 
-    expect(image!.style.display).toBe('none');
+    expect(image!.closest<HTMLElement>('[data-image-frame]')!.style.display).toBe('none');
     expect(container.querySelector('[data-image-frame]')?.classList.contains('animate-pulse')).toBe(
       false,
     );

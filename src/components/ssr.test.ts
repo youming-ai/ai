@@ -13,8 +13,7 @@ it('renders the Explore shell server-side without touching browser globals', () 
     initialFilters: { categories: [] },
   }).value;
   expect(html).toContain('All links'); // the rail's global row
-  // The theme control renders as an icon-less button: localStorage is the
-  // script's to read, after paint.
+  // The theme control is available in both desktop and mobile layouts.
   expect(html).toContain('aria-label="Theme"');
 });
 
@@ -202,6 +201,31 @@ it('renders rail rows tall enough to tap', () => {
   expect(link).toContain('min-h-7');
 });
 
+it('shows Web3 for historical crypto filters while keeping their links compatible', () => {
+  const markup = ExploreView({
+    initialData: { items: [], nextCursor: null },
+    initialFilters: { categories: [{ value: 'crypto', label: 'Crypto', count: 3 }] },
+    initialCategory: 'crypto',
+  }).value;
+  expect(markup).toContain('>Web3</span>');
+  expect(markup).not.toContain('>Crypto<');
+  expect(markup).toContain('href="/crypto"');
+});
+
+it.each(['grid', 'list'] as const)('preserves the %s layout across category navigation', (view) => {
+  const markup = ExploreView({
+    initialData: { items: [], nextCursor: null },
+    initialFilters: { categories: [{ value: 'tools', label: 'Tools', count: 1 }] },
+    initialCategory: 'tools',
+    initialView: view,
+  }).value;
+  const suffix = view === 'list' ? '?view=list' : '';
+  expect(markup.match(new RegExp(`href="/tools${suffix.replace('?', '\\?')}"`, 'g'))).toHaveLength(
+    2,
+  );
+  expect(markup).toContain(`href="/${suffix}"`);
+});
+
 it('serves our own media route as a root-relative path', () => {
   // The bug this pins: card images were rendered as
   // `https://<canonical-origin>/media/<id>`, and on the deployed host the
@@ -280,11 +304,7 @@ it.each([
   expect(html).not.toContain('data-original-src');
 });
 
-it('renders the layout and theme controls with the rail, not in a toolbar', () => {
-  // The toolbar was removed: the rail is the only chrome, and the controls sit
-  // at its foot so they exist in both places it renders — the desktop column
-  // and the mobile disclosure. One copy would strand them on the other side of
-  // the `lg` breakpoint; a toolbar would put them back above the board.
+it('keeps mobile controls outside the disclosure and desktop controls below the rail', () => {
   const html = ExploreView({
     initialData: { items: [], nextCursor: null },
     initialFilters: { categories: [] },
@@ -293,14 +313,14 @@ it('renders the layout and theme controls with the rail, not in a toolbar', () =
   expect(html.match(/aria-label="Theme"/g)).toHaveLength(2);
   expect(html.match(/>Grid</g)).toHaveLength(2);
   expect(html.match(/>List</g)).toHaveLength(2);
-  // At the foot of each rail, not above it: the controls follow the last filter
-  // row in both render sites (2 "Topics" headings, 2 control groups).
+  // Mobile controls precede the disclosure; desktop controls follow the rail.
   const railRows = [...html.matchAll(/Topics/g)].map((match) => match.index ?? 0);
   const themes = [...html.matchAll(/aria-label="Theme"/g)].map((match) => match.index ?? 0);
   expect(railRows).toHaveLength(2);
   expect(themes.length).toBe(2);
   expect(themes[0]).toBeGreaterThan(railRows[0]!);
-  expect(themes[1]).toBeGreaterThan(railRows[1]!);
+  expect(themes[1]).toBeLessThan(html.indexOf('<details'));
+  expect(html).toContain('group-open:rotate-180');
   // The removed bar was the only backdrop-blurred surface in the markup.
   expect(html).not.toContain('backdrop-blur');
 });

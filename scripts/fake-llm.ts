@@ -23,6 +23,19 @@ const port = Number(process.argv[2] ?? 8899);
 
 /** First match wins, so the order is the priority order. */
 const CATEGORY_HINTS: [RegExp, string][] = [
+  [/\b(web3|blockchain|ethereum|bitcoin|wallet|smart contract|dapp|zero-knowledge)\b/i, 'crypto'],
+  [
+    /\b(typography|typeface|design system|visual design|interface|portfolio|command palette)\b/i,
+    'design',
+  ],
+  [
+    /\b(postgres|database|library|framework|debugging|testing|engineering|implementation)\b/i,
+    'development',
+  ],
+  [/\b(app|notebook|productivity|workflow|browser extension|tool)\b/i, 'tools'],
+  [/\b(video|podcast|interview|walkthrough)\b/i, 'media'],
+  [/\b(essay|argument|reflection|local-first)\b/i, 'articles'],
+
   [/\b(hbm|dram|ddr\d|nand|ssd|nvme|memory|storage|cxl)\b/i, 'memory'],
   [
     /\b(gpu|geforce|radeon|rtx|accelerator|npu|tpu|h100|h200|b200|gb300|mi\d{3})\b/i,
@@ -42,7 +55,7 @@ const CATEGORY_HINTS: [RegExp, string][] = [
 ];
 
 const OFF_BEAT =
-  /\b(elden ring|patch notes|esports|playstation|xbox|nintendo|crypto|bitcoin|electric vehicle|movie|tv show|recipe|weather)\b/i;
+  /\b(elden ring|patch notes|esports|playstation|xbox|nintendo|token pump|price prediction|airdrop spam|electric vehicle|movie|tv show|recipe|weather)\b/i;
 
 const TAG_HINTS: [RegExp, string][] = [
   [/\bhbm\b/i, 'hbm'],
@@ -66,7 +79,7 @@ function enrichmentFor(title: string, text: string): unknown {
   const haystack = `${title} ${text}`;
   const onTopic = !OFF_BEAT.test(haystack);
   const category = onTopic
-    ? (CATEGORY_HINTS.find(([pattern]) => pattern.test(haystack))?.[1] ?? '')
+    ? (CATEGORY_HINTS.find(([pattern]) => pattern.test(haystack))?.[1] ?? 'articles')
     : '';
   const tags = TAG_HINTS.filter(([pattern]) => pattern.test(haystack))
     .map(([, tag]) => tag)

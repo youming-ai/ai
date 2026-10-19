@@ -16,7 +16,7 @@ export const SITE_TITLE = SITE_NAME;
  *  this string with the same status and item count. */
 export const CRAWLER_USER_AGENT = `${new URL(SITE_ORIGIN).host}/1.0 (+${SITE_ORIGIN})`;
 export const SITE_DESCRIPTION =
-  'Accelerators, processors, servers, memory and the datacenter build-out behind AI — collected from the hardware press and curated by model.';
+  'Useful tools, thoughtful design, software craft and AI worth exploring — independently collected and curated for what you can use, learn or make.';
 
 /** Scope label for the global (uncategorised) feed: the rail's All row and the
  *  RSS channel-title marker. Single source of truth so the marker comparison in

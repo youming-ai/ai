@@ -412,13 +412,36 @@ describe('prompt contract', () => {
     expect(prompt).toContain('a CPU, SoC, process node or packaging story is `processors`');
   });
 
-  it('separates "cannot file it" from "has no hardware substance"', () => {
-    // The rule that keeps the board clean without over-rejecting: a cross-beat
-    // story is still worth storing, a deals round-up is not.
-    expect(prompt).toContain('not automatically off-beat');
-    expect(prompt).toContain('deals round-up');
-    expect(prompt).toContain('storing it with no category puts it on the board and in no hub');
-    expect(prompt).toContain('Leave category empty only for a story that genuinely spans beats');
+  it('prioritises useful discoveries and rejects thin promotion even when it is on topic', () => {
+    expect(prompt).toContain('the subject fits the desk');
+    expect(prompt).toContain('a concrete reason to use, learn from, build with or appreciate it');
+    expect(prompt).toContain('an AI wrapper with no stated distinct capability');
+    expect(prompt).toContain('routine spec bumps');
+    expect(prompt).toContain('Do not invent product features');
+    expect(prompt).toContain('A small independent project can score highly');
+    expect(prompt).not.toContain('true only for AI-hardware stories');
+    expect(prompt).not.toContain('general software, app and web news');
+  });
+
+  it('files products and creative work without treating every AI product as a model', () => {
+    for (const key of ['tools', 'design', 'development', 'articles', 'social', 'media', 'other']) {
+      expect(CURATOR_CATEGORY_KEYS).toContain(key);
+      expect(parseEnrichment({ ...enrichment, category: key }).category).toBe(key);
+    }
+    expect(prompt).toContain('A product using AI is still `tools`');
+    expect(prompt).toContain('Use `other` for an accepted discovery');
+    expect(CURATOR_CATEGORY_KEYS).toContain('crypto');
+    expect(parseEnrichment({ ...enrichment, category: 'crypto' }).category).toBe('crypto');
+  });
+
+  it('includes useful Web3 projects and separates them from investment hype', () => {
+    expect(prompt).toContain('Web3 is an active beat');
+    expect(prompt).toContain('category `crypto` (displayed as Web3)');
+    expect(prompt).toContain('smart-contract tools');
+    expect(prompt).toContain('zero-knowledge research');
+    expect(prompt).toContain('rather than rejecting Web3 as a whole');
+    expect(prompt).toContain('reject price predictions, token pumps, airdrop spam');
+    expect(prompt).not.toContain('never assign `crypto` to a new link');
   });
 
   it('tells the model never to repeat the category as a tag', () => {

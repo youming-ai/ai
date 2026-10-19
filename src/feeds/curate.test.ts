@@ -308,6 +308,20 @@ describe('curatePending', () => {
     expect(tagRows).toEqual(['hbm', 'supply']);
   });
 
+  it('does not repeat either the crypto key or its Web3 label as a tag', async () => {
+    const { db, batched } = curateDb([pendingRow()]);
+    stubLlm({
+      values: {
+        1: { ...enrichment, category: 'crypto', tags: ['Crypto', 'Web3', 'wallets', 'WALLETS'] },
+      },
+    });
+    await curatePending(envWith(db));
+    const tagRows = batched[0]!
+      .filter((statement) => statement.sql.includes('INSERT OR IGNORE INTO article_tags'))
+      .map((statement) => statement.params[1]);
+    expect(tagRows).toEqual(['wallets']);
+  });
+
   it('filters an off-beat story without deleting it', async () => {
     const { db, ran, batched } = curateDb([pendingRow()]);
     stubLlm({ values: { 1: { ...enrichment, isOnTopic: false, category: '' } } });

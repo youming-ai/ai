@@ -3,11 +3,7 @@ import { GLOBAL_FEED_LABEL } from '../../site';
 import type { ExploreFeed, ExploreFilterOption, ExploreFilterSet } from '../../types';
 import { attr, type Html, html } from '../html';
 import ExploreCard from './ExploreCard';
-
-// Multi-column masonry approximation. column-fill: balance evens the column
-// heights as items are appended; tailwind has no built-in for it.
-const MASONRY_CLASS =
-  'columns-1 gap-3 p-3 [column-fill:balance] md:columns-2 xl:columns-3 2xl:columns-4';
+import ExploreGridPage from './ExploreGridPage';
 
 /** How many cards are treated as above the fold: eager, and high fetch
  *  priority. The rest stay lazy.
@@ -23,25 +19,14 @@ export const ABOVE_THE_FOLD_CARDS = 4;
 
 export type ViewMode = 'grid' | 'list';
 
-const SKELETON_CARD = html`<div class="mb-3 h-56 animate-pulse rounded-card bg-overlay/5"></div>`;
+const SKELETON_CARD = html`<div class="h-56 animate-pulse rounded-card bg-overlay/5"></div>`;
 
-/** The theme control. The markup ships both icons hidden and no label beyond
- *  "Theme", and `src/scripts/board.ts` reveals the right one after paint: the
- *  rail renders this control twice (desktop column and mobile disclosure), and
- *  `data-theme` on the root element is the one source of truth for both, which
- *  the inline script in Layout.astro reads as well. Showing an icon from the
- *  server would be a guess until the script runs; hiding them keeps the
- *  button's box (min-w/min-h) stable meanwhile. Inline moon/sun (lucide paths):
- *  two icons don't justify a dependency. */
-const THEME_TOGGLE = html`<button type="button" data-theme-toggle="true" aria-label="Theme" title="Theme" class="flex min-h-9 min-w-9 items-center justify-center rounded-pill text-chalkdim transition-colors hover:bg-overlay/10 hover:text-chalk ds-press">
-  <svg data-theme-icon="dark" style="display:none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4" aria-hidden="true">
-    <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
-  </svg>
-  <svg data-theme-icon="light" style="display:none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4" aria-hidden="true">
-    <circle cx="12" cy="12" r="4"></circle>
-    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
-  </svg>
-</button>`;
+/** Native select keeps all three preferences available to keyboard and touch users. */
+const THEME_SELECT = html`<select data-theme-select="true" aria-label="Theme" class="min-h-11 w-20 shrink-0 border border-line/40 bg-panel px-1 text-xs text-chalk">
+  <option value="system">System</option>
+  <option value="light">Light</option>
+  <option value="dark">Dark</option>
+</select>`;
 
 /** One category link in the rail. */
 function filterRow(label: string, count: number | null, active: boolean, href: string): Html {
@@ -63,8 +48,9 @@ function categoryRail(
   value: string,
   /** From the payload; undefined on a cache entry written before v2. */
   providedTotal: number | null | undefined,
+  view: ViewMode,
 ): Html {
-  const hrefFor = (v: string) => (v ? `/${v}` : '/');
+  const hrefFor = (v: string) => `${v ? `/${v}` : '/'}${view === 'list' ? '?view=list' : ''}`;
   // Unknown counts sum to null, not zero: an outage should leave the label bare
   // rather than assert the site holds no links. An empty list is the opposite
   // case — a successful count over an empty corpus — and is known to be zero,
@@ -90,7 +76,12 @@ function categoryRail(
       (group) => html`<div>
         <p class="px-2 pt-3 pb-1 ds-micro uppercase tracking-caption text-chalkdim">${group.label}</p>
         ${group.options.map((option) =>
-          filterRow(option.label, option.count, value === option.value, hrefFor(option.value)),
+          filterRow(
+            CATEGORIES[option.value]?.label ?? option.label,
+            option.count,
+            value === option.value,
+            hrefFor(option.value),
+          ),
         )}
       </div>`,
     )}
@@ -127,20 +118,20 @@ export default function ExploreView({
   // category is stored as NULL and shows on the global board only. Older cached
   // payloads and the registry fallback carry none, so the sum is still the
   // fallback.
-  const rail = categoryRail(initialFilters.categories, initialCategory, initialFilters.total);
+  const rail = categoryRail(
+    initialFilters.categories,
+    initialCategory,
+    initialFilters.total,
+    initialView,
+  );
 
   const cards =
     initialView === 'list'
       ? html`<ol data-board="true" data-view="list" data-category="${initialCategory}" class="divide-y divide-line/30 border-b border-line/30" aria-label="Explore links">
           ${initialData.items.map((article) => ExploreCard({ article, variant: 'list' }))}
         </ol>`
-      : // Native CSS multi-column, not a masonry lib. Fills column-major (items
-        // 1..n down column 1); swap in a server-side round-robin split if
-        // reading order ever has to be exact.
-        html`<section data-board="true" data-view="grid" data-category="${initialCategory}" class="${MASONRY_CLASS}" aria-label="Explore links">
-          ${initialData.items.map((article, index) =>
-            ExploreCard({ article, priority: index < ABOVE_THE_FOLD_CARDS }),
-          )}
+      : html`<section data-board="true" data-view="grid" data-category="${initialCategory}" class="px-3 pt-3" aria-label="Explore links">
+          ${ExploreGridPage(initialData.items, ABOVE_THE_FOLD_CARDS)}
         </section>`;
 
   const feed = hasItems
@@ -153,11 +144,8 @@ export default function ExploreView({
           : 'No links match these filters. Clear one to widen the explore feed.'
       }</p>`;
 
-  // The layout and theme controls live at the foot of the rail, so they appear
-  // in the desktop column and at the bottom of the mobile disclosure — the two
-  // places the rail is rendered. The theme control exists twice for the same
-  // reason, and `src/scripts/board.ts` keeps both copies in step through
-  // `data-theme` on the root.
+  // Controls stay at the foot of the desktop rail and above the mobile
+  // disclosure, where they remain available without opening the categories.
   //
   // `justify-between` puts the layout toggle at the row's left edge and the
   // theme control at its right, which is the rail's own inner edge in the
@@ -167,10 +155,10 @@ export default function ExploreView({
     <nav class="ds-segmented shrink-0" aria-label="Feed layout">
       ${(['grid', 'list'] as const).map(
         (view) =>
-          html`<a href="?view=${view}"${attr('aria-current', initialView === view && 'true')} class="ds-seg-tab min-h-7 px-3 text-xs ${initialView === view ? 'ds-seg-tab-active' : 'ds-seg-tab-inactive'}">${view === 'grid' ? 'Grid' : 'List'}</a>`,
+          html`<a href="?view=${view}"${attr('aria-current', initialView === view && 'true')} class="ds-seg-tab min-h-9 px-2.5 text-xs ${initialView === view ? 'ds-seg-tab-active' : 'ds-seg-tab-inactive'}">${view === 'grid' ? 'Grid' : 'List'}</a>`,
       )}
     </nav>
-    ${THEME_TOGGLE}
+    ${THEME_SELECT}
   </div>`;
 
   // h-screen, not 100vh minus a bar: there is no bar any more. The rail scrolls
@@ -192,20 +180,27 @@ export default function ExploreView({
         <div class="shrink-0 border-t border-line/40 p-2">${controls}</div>
       </aside>
       <div class="min-w-0 flex-1">
-        <details class="border-b border-line/40 lg:hidden">
-          <summary class="cursor-pointer list-none px-3 py-2 ds-caption uppercase tracking-caption text-chalkdim [&::-webkit-details-marker]:hidden">Categories ${initialCategory ? `· ${scopeLabel}` : ''}</summary>
-          <div class="p-2">
-            ${rail}
-            <div class="mt-3 border-t border-line/40 pt-3">${controls}</div>
-          </div>
-        </details>
-        <div id="explore-results" tabindex="-1" class="scroll-mt-4">${feed}</div>
+        <div class="sticky top-0 z-20 border-b border-line/40 bg-night lg:hidden">
+          <div class="px-3 py-2">${controls}</div>
+          <details class="group">
+            <summary class="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 ds-caption uppercase tracking-caption text-chalkdim [&::-webkit-details-marker]:hidden">
+              <span>Categories ${initialCategory ? `· ${scopeLabel}` : ''}</span>
+              <svg aria-hidden="true" class="h-4 w-4 shrink-0 group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"></path></svg>
+            </summary>
+            <div class="max-h-[60dvh] overflow-y-auto px-2 pb-2">${rail}</div>
+          </details>
+        </div>
+        <div id="explore-results" tabindex="-1" class="scroll-mt-28 lg:scroll-mt-4">${feed}</div>
         ${
           hasItems &&
-          html`<div data-board-sentinel="true" data-cursor="${cursor}" class="flex flex-col items-center gap-2 py-6" aria-live="polite">
-            <div data-board-loading="true" hidden="" class="${MASONRY_CLASS}" role="status">
+          html`<div data-board-sentinel="true" data-cursor="${cursor}" class="flex flex-col items-center gap-2 px-3 py-6" aria-live="polite">
+            <div data-board-loading="true" hidden="" class="w-full" role="status">
               <span class="sr-only">Loading more stories</span>
-              ${[SKELETON_CARD, SKELETON_CARD, SKELETON_CARD, SKELETON_CARD]}
+              ${
+                initialView === 'list'
+                  ? html`<div class="space-y-3" aria-hidden="true">${[1, 2, 3].map(() => html`<div class="h-16 animate-pulse border-b border-line/30 bg-overlay/5 sm:h-10"></div>`)}</div>`
+                  : html`<div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" aria-hidden="true">${[SKELETON_CARD, SKELETON_CARD, SKELETON_CARD, SKELETON_CARD]}</div>`
+              }
             </div>
             <p data-board-error="true" hidden="" role="alert" class="ds-caption text-live"></p>
             <p data-board-end="true"${attr('hidden', cursor !== '')} class="ds-caption uppercase tracking-caption text-chalkdim">End of the feed</p>

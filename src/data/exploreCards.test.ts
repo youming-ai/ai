@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ExploreArticle } from '../types';
 import { renderExploreCards } from './exploreCards';
 
@@ -29,6 +29,7 @@ describe('renderExploreCards', () => {
   it('renders the grid wrapper for the grid view', () => {
     const html = renderExploreCards([article()], 'grid');
     expect(html).toContain('<article');
+    expect(html).toContain('data-board-page="true"');
     expect(html).not.toContain('<li');
   });
 
@@ -39,6 +40,7 @@ describe('renderExploreCards', () => {
     const html = renderExploreCards([article()], 'list');
     expect(html).toContain('<li');
     expect(html).not.toContain('<article');
+    expect(html).not.toContain('data-board-page');
   });
 
   it('appended cards are never treated as above the fold', () => {
@@ -86,5 +88,26 @@ describe('renderExploreCards', () => {
 
   it('renders nothing for an empty page', () => {
     expect(renderExploreCards([], 'grid')).toBe('');
+  });
+
+  it('keeps mobile list titles and sources readable', () => {
+    const markup = renderExploreCards(
+      [article({ title: 'A long headline about new hardware' })],
+      'list',
+    );
+    expect(markup).toContain('line-clamp-2');
+    expect(markup).toContain('sm:truncate');
+    expect(markup).toMatch(/<span class="truncate">example.com<\/span>/);
+  });
+
+  it.each(['grid', 'list'] as const)('includes relative and full UTC dates in %s', (view) => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-19T12:00:00Z'));
+    const markup = renderExploreCards(
+      [article({ publishedAt: Date.parse('2026-10-19T10:00:00Z') })],
+      view,
+    );
+    expect(markup).toContain('2h ago');
+    expect(markup).toContain('datetime="2026-10-19T10:00:00.000Z"');
+    expect(markup).toContain('title="2026-10-19 10:00 UTC"');
   });
 });
