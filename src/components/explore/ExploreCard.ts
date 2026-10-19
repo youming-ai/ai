@@ -1,5 +1,4 @@
 import { categoryLabel } from '../../categories';
-import { transformedFeedImage } from '../../images';
 import { sameOriginAsset, withTemporalFragment } from '../../media';
 import { articleDeck } from '../../site';
 import type { ExploreArticle } from '../../types';
@@ -43,15 +42,9 @@ export default function ExploreCard({
   const domain = article.sourceDomain || 'source';
   const description = articleDeck(article);
 
-  // The publisher's CDN is asked for a card-sized image where that is known to
-  // work (see src/images.ts for the measurements). The original is carried
-  // alongside whenever the two differ, because a rule that rots answers 404/400
-  // rather than degrading — `src/scripts/board.ts` retries it once.
   // Root-relative for our own media route (see sameOriginAsset): an <img> pinned
   // to the canonical origin breaks on any other host serving this app.
   const imageUrl = sameOriginAsset(article.imageUrl);
-  const imageSrc = transformedFeedImage(imageUrl);
-  const imageFallback = imageSrc === imageUrl ? undefined : imageUrl;
 
   // Engage the shimmer only when the image is genuinely still loading — cached
   // / already-complete images stay visible and never flash. Rendered with no
@@ -93,7 +86,7 @@ export default function ExploreCard({
       // element is not focusable, and the wrapping link already carries the
       // article title as its name.
       html`<video data-preview="true" data-card-media="true" src="${withTemporalFragment(imageUrl)}" muted="" loop="" playsinline="" preload="none" aria-hidden="true" class="h-full w-full object-cover"></video>`
-    : html`<img data-card-media="true"${attr('fetchpriority', priority && 'high')} src="${imageSrc}"${attr('data-original-src', imageFallback)} alt="" decoding="async" class="h-full w-full object-cover transition-opacity duration-300 opacity-100" loading="${priority ? 'eager' : 'lazy'}"/>`;
+    : html`<img data-card-media="true"${attr('fetchpriority', priority && 'high')} src="${imageUrl}" alt="" decoding="async" class="h-full w-full object-cover transition-opacity duration-300 opacity-100" loading="${priority ? 'eager' : 'lazy'}"/>`;
 
   return html`<article class="ds-signal contain-layout mb-3 overflow-hidden break-inside-avoid rounded-card border border-line/40 bg-panel/70" style="--signal:${score}%;--signal-accent:var(--c-${signalAccent(score)})">
     <div class="flex items-center justify-between border-b border-line/40 px-3 py-1.5 ds-caption text-pitch">

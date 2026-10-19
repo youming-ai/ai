@@ -13,7 +13,6 @@ descriptions until this file.
 | `bun run perf:budget` | Gzip budget for what a page **downloads**, computed by walking static imports from the page entries. Runs at the end of `bun run build`, so exceeding it fails the build. |
 | `bun run perf:seed` | Seeds a deterministic 200-row board into the local D1 that the *built* worker reads. |
 | `bun run perf:images` | Audits the live feed's card images through the real `parseRss`: total, median, largest, formats, and the fold's weight. |
-| `bun run perf:transforms` | Re-checks every image host against the live feed for the free transform parameters `src/images.ts` relies on. `--all` reports the coverage those rules buy. |
 | `bun run feeds:probe` | The source registry's own instrument, kept here rather than in `src/`: fetches every entry in `FEED_SOURCES` with the real `parseRss` and reports liveness, parsed vs kept item counts (the freshness window and the per-source cap), median text length, images and publisher categories. Run it before changing a source, a cap, or the parser — the registry is only as good as its last measurement. |
 
 ## Measuring, in order
@@ -55,18 +54,9 @@ Supporting A/Bs, each on one build so the bundle is not a variable:
 | Inlining the stylesheet (`build.inlineStylesheets: 'always'`) | FCP 516 → 308 ms, but LCP 2340 → 2412 ms | **rejected** — LCP is the metric being optimised |
 | Preloading the fonts | FCP 516 → 652 ms | **rejected** — `font-display: swap` already paints text |
 
-Image delivery, measured from real HTTP responses (`content-length` via ranged
-GET) against the live feed — **not** from the render harness, whose fixture serves
-its own images so the browser-side numbers stay hermetic:
-
-| | before | after |
-| --- | --- | --- |
-| whole feed (49 images) | 13,271 KB | 11,515 KB (−13%) |
-| first 10, the fold | 2,257 KB | **978 KB (−57%)** |
-
-Only three hosts honour free transform parameters (`images.ctfassets.net`,
-`pbs.twimg.com`, `cdn.shopify.com`); the largest images in the feed are on hosts
-that do not, and are served 1:1. That residue is issue #158.
+Card images use the URLs supplied by the feed, without adding resize or compression
+parameters. The media proxy forwards image bytes unchanged. Earlier publisher-CDN
+transform measurements are recorded in issue #158; those transforms have been removed.
 
 ## What these numbers do not cover
 
