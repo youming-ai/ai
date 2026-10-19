@@ -52,9 +52,9 @@ export type ArticleType = (typeof ARTICLE_TYPES)[number];
  *  a column that already exists in `articles`/`article_tags`; nothing here is
  *  invented for the pipeline's convenience. */
 export interface ArticleEnrichment {
-  /** false means the curator judged the story off-beat: stored as `filtered`,
-   *  never shown. The desk's feeds are broad (The Verge, TechCrunch publish EVs
-   *  and game studios), so this is the gate that keeps the board on-beat. */
+  /** false means the link is off-beat or lacks a concrete reason to recommend
+   *  it: stored as `filtered`, never shown. Ingestion still collects first so
+   *  a model outage cannot stop collection. */
   isOnTopic: boolean;
   /** A key from CURATOR_CATEGORY_KEYS, or '' for cross-beat stories. */
   category: string;

@@ -1,4 +1,6 @@
 import ExploreCard from '../components/explore/ExploreCard';
+import ExploreGridPage from '../components/explore/ExploreGridPage';
+import { html } from '../components/html';
 import type { ExploreArticle } from '../types';
 
 // --- Server-rendered card fragments ---
@@ -14,12 +16,14 @@ import type { ExploreArticle } from '../types';
 // Measured cost of the alternative: at 20x CPU throttling the island produced
 // 25ms of TBT, so this is a data-size trade, not a speed one.
 //
-// The fragment is deliberately *just the cards*: the caller appends them into
-// the `<section>` or `<ol>` the first page already rendered.
+// Grid pages balance independently; list items append directly into the <ol>.
 
 /** One page of cards as HTML, ready to append. `view` picks the list `<li>` or
  *  the grid `<article>`; appended cards are never above the fold, so they never
  *  get the eager/high-priority image treatment. */
 export function renderExploreCards(items: ExploreArticle[], view: 'grid' | 'list'): string {
-  return items.map((article) => ExploreCard({ article, variant: view }).value).join('');
+  if (items.length === 0) return '';
+  return view === 'grid'
+    ? ExploreGridPage(items).value
+    : html`${items.map((article) => ExploreCard({ article, variant: 'list' }))}`.value;
 }

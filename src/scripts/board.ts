@@ -29,11 +29,15 @@ function initAppend(board: HTMLElement): void {
   const category = board.dataset.category ?? '';
   let cursor = sentinel.dataset.cursor ?? '';
   let busy = false;
+  let inRange = false;
+  let stopped = false;
+  let failures = 0;
+  let retryTimer: number | undefined;
 
   if (!cursor) return;
 
   async function load(): Promise<void> {
-    if (busy || !cursor) return;
+    if (busy || !cursor || stopped || retryTimer !== undefined) return;
     busy = true;
     if (loading) loading.hidden = false;
     if (failed) failed.hidden = true;
@@ -46,26 +50,37 @@ function initAppend(board: HTMLElement): void {
       const response = await fetch(`/cards.json?${params}`);
       if (!response.ok) throw new Error('The news feed is temporarily unavailable.');
       const page = (await response.json()) as { html: string; nextCursor: string | null };
+      if (stopped) return;
 
-      // beforeend on the board itself: <article> into the masonry section,
-      // <li> into the list. Both are what the server would have produced.
+      // Grid page wrappers and list rows both arrive as server-rendered HTML.
       const existing = board.children.length;
       board.insertAdjacentHTML('beforeend', page.html);
       // Wire only what arrived. The React version got this for free — every
       // appended card mounted its own effects — and forgetting it meant page 2
-      // onwards had no broken-image handling and no
-      // playing video previews.
+      // onwards had no broken-image handling or playing video previews.
       wireMedia(Array.from(board.children).slice(existing));
       cursor = page.nextCursor ?? '';
+      failures = 0;
       sentinel.dataset.cursor = cursor;
       if (end) end.hidden = Boolean(cursor);
     } catch (error) {
       // The reader keeps what they already had, and is told what happened —
       // 502 from the endpoint, or no network at all.
+      if (stopped) return;
+      failures += 1;
+      const retryDelay = failures <= 2 ? failures * 2000 : 0;
       if (failed) {
         failed.hidden = false;
-        failed.textContent =
-          error instanceof Error ? error.message : 'Could not load the news feed.';
+        const message = error instanceof Error ? error.message : 'Could not load the news feed.';
+        failed.textContent = retryDelay
+          ? `${message} Retrying in ${retryDelay / 1000} seconds…`
+          : `${message} Scroll away and back to try again.`;
+      }
+      if (retryDelay) {
+        retryTimer = window.setTimeout(() => {
+          retryTimer = undefined;
+          if (inRange) void load();
+        }, retryDelay);
       }
       return;
     } finally {
@@ -74,9 +89,8 @@ function initAppend(board: HTMLElement): void {
     }
 
     // Appending can leave the sentinel inside the preload margin, especially
-    // on wide grids or short pages. A fresh observation checks its new position
-    // even if it never crossed an intersection threshold. Only rearm after a
-    // success, so an unavailable endpoint cannot cause an automatic retry loop.
+    // on wide grids or short pages. Recheck its position after each successful
+    // append; failures use bounded delays instead of rearming immediately.
     observer?.unobserve(sentinel);
     if (cursor) observer?.observe(sentinel);
     else observer?.disconnect();
@@ -88,11 +102,32 @@ function initAppend(board: HTMLElement): void {
       ? null
       : new IntersectionObserver(
           (entries) => {
-            if (entries.some((entry) => entry.isIntersecting)) void load();
+            inRange = entries.some((entry) => entry.isIntersecting);
+            if (inRange) void load();
+            else failures = 0;
           },
           { rootMargin: '600px' },
         );
   observer?.observe(sentinel);
+  const resume = () => {
+    window.clearTimeout(retryTimer);
+    retryTimer = undefined;
+    failures = 0;
+    if (inRange) void load();
+  };
+  window.addEventListener('online', resume);
+  window.addEventListener(
+    'pagehide',
+    (event) => {
+      // A page in the back/forward cache resumes with its existing observers.
+      if (event.persisted) return;
+      stopped = true;
+      observer?.disconnect();
+      window.clearTimeout(retryTimer);
+      window.removeEventListener('online', resume);
+    },
+    { once: true },
+  );
 }
 
 /** Theme switching for every instance on the page (the rail renders the control
@@ -100,67 +135,40 @@ function initAppend(board: HTMLElement): void {
  *  also what the inline script in Layout.astro reads to keep the theme-color
  *  meta tag in step. */
 function initTheme(): void {
-  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-theme-toggle]'));
-  if (buttons.length === 0) return;
+  const selects = Array.from(document.querySelectorAll('select')).filter((select) =>
+    select.hasAttribute('data-theme-select'),
+  );
+  if (selects.length === 0) return;
 
   const root = document.documentElement;
-  const stored = (): string | null => {
-    try {
-      return localStorage.getItem('theme');
-    } catch {
-      return null; // private mode / storage disabled
-    }
-  };
   const systemTheme = window.matchMedia('(prefers-color-scheme: light)');
-  const choice = stored();
-  let manualChoice: 'light' | 'dark' | null =
-    choice === 'light' || choice === 'dark' ? choice : null;
-  const preferred = (): 'dark' | 'light' =>
-    manualChoice ?? (systemTheme.matches ? 'light' : 'dark');
-  const current = (): 'dark' | 'light' => {
-    const applied = root.dataset.theme;
-    if (applied === 'dark' || applied === 'light') return applied;
-    return preferred();
-  };
+  let choice: 'system' | 'light' | 'dark' = 'system';
+  try {
+    const stored = localStorage.getItem('theme');
+    if (stored === 'light' || stored === 'dark') choice = stored;
+  } catch {
+    /* private mode / storage disabled */
+  }
 
-  const paint = (): void => {
-    const theme = current();
-    const label = theme === 'dark' ? 'Dark theme' : 'Light theme';
-    for (const button of buttons) {
-      button.setAttribute('aria-label', label);
-      button.title = label;
-      for (const icon of button.querySelectorAll<SVGElement>('[data-theme-icon]')) {
-        // `style.display`, not the `hidden` attribute or `icon.hidden`: `hidden`
-        // is defined for HTML elements, React's SVG props reject it, and on an
-        // SVG the IDL property does not exist at all — assigning it sets a
-        // plain JS field and the icon never appears. (board.test.tsx pins it.)
-        icon.style.display = icon.getAttribute('data-theme-icon') === theme ? '' : 'none';
-      }
-    }
+  const apply = (): void => {
+    root.dataset.theme = choice === 'system' ? (systemTheme.matches ? 'light' : 'dark') : choice;
+    for (const select of selects) select.value = choice;
   };
-
-  // Match the pre-paint script: use a saved choice or the system preference.
-  const initial = preferred();
-  if (root.dataset.theme !== initial) root.dataset.theme = initial;
-  paint();
-  new MutationObserver(paint).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+  apply();
   systemTheme.addEventListener('change', () => {
-    if (manualChoice) return;
-    root.dataset.theme = preferred();
-    paint();
+    if (choice === 'system') apply();
   });
 
-  for (const button of buttons) {
-    button.addEventListener('click', () => {
-      const next = current() === 'light' ? 'dark' : 'light';
-      manualChoice = next;
+  for (const select of selects) {
+    select.addEventListener('change', () => {
+      choice = select.value === 'light' || select.value === 'dark' ? select.value : 'system';
       try {
-        localStorage.setItem('theme', next);
+        if (choice === 'system') localStorage.removeItem('theme');
+        else localStorage.setItem('theme', choice);
       } catch {
         /* private mode / storage disabled */
       }
-      root.dataset.theme = next;
-      paint();
+      apply();
     });
   }
 }
@@ -206,7 +214,7 @@ function wireMedia(roots: (Element | Document)[]): void {
 
     if (media instanceof HTMLVideoElement) {
       previewVideos.push(media);
-      media.addEventListener('error', () => hide(media), { once: true });
+      media.addEventListener('error', () => hide(frame), { once: true });
       continue;
     }
     if (!(media instanceof HTMLImageElement)) continue;
@@ -218,8 +226,12 @@ function wireMedia(roots: (Element | Document)[]): void {
     }
     const onError = () => {
       frame.classList.remove('animate-pulse');
-      hide(media);
+      hide(frame);
     };
+    if (media.complete) {
+      if (media.naturalWidth > 0) settle(frame, media);
+      else onError();
+    }
     media.addEventListener('load', () => {
       media.removeEventListener('error', onError);
       settle(frame, media);

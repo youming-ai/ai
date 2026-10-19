@@ -46,11 +46,25 @@ describe('feed sources', () => {
     expect([...scores].sort((a, b) => b - a)).toEqual(scores);
   });
 
+  it('balances discovery sources and bounds the first ingest', () => {
+    const ids = FEED_SOURCES.map((source) => source.id);
+    for (const id of [
+      'sidebar',
+      'simon-willison',
+      'smashing-magazine',
+      'product-hunt',
+      'github-blog',
+    ]) {
+      expect(ids).toContain(id);
+    }
+    expect(FEED_SOURCES.reduce((sum, source) => sum + source.maxItems, 0)).toBeLessThanOrEqual(100);
+    expect(ids).not.toContain('kitguru');
+    expect(ids).not.toContain('wccftech');
+  });
+
   it('does not carry the retired Poche source', () => {
-    // Leaving the registry is how a source is retired: `enabledSources`
-    // intersects D1's enabled ids with this list, so a row for a source that is
-    // no longer here is inert. Removing it also stops the desk from filing new
-    // rows into the Poche categories, which are now the archive.
+    // Independent discovery uses Poche as a taste reference, not an upstream.
+    // D1-enabled sources that are absent from this registry remain inert.
     expect(FEED_SOURCES.map((source) => source.id)).not.toContain('poche-explore');
   });
 });

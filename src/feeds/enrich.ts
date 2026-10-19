@@ -104,11 +104,12 @@ export async function applyEnrichment(
   outcome: D1PreparedStatement,
 ): Promise<void> {
   const category = canonicalCategory(enrichment.category);
+  const categoryName = category ? CATEGORIES[category]?.label.toLowerCase() : null;
   const tags = [
     ...new Set(
       enrichment.tags
         .map((tag) => tag.trim().toLowerCase())
-        .filter((tag) => tag.length > 0 && tag !== category),
+        .filter((tag) => tag.length > 0 && tag !== category && tag !== categoryName),
     ),
   ].slice(0, 8);
   const now = Date.now();

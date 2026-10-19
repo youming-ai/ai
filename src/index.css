@@ -151,13 +151,6 @@
     @apply bg-night text-chalk font-body antialiased;
   }
 
-  /* Tailwind 4 resets buttons to the platform's default cursor; this board's
-     buttons (load more, the theme control) kept v3's pointer. */
-  button:not(:disabled),
-  [role='button']:not(:disabled) {
-    cursor: pointer;
-  }
-
   :focus-visible {
     outline: 2px solid rgb(var(--c-pitch));
     outline-offset: 2px;
@@ -194,19 +187,6 @@
   .ds-seg-tab-inactive {
     @apply text-chalkdim hover:text-chalk;
   }
-
-  /* Buttons: one voice — the secondary outlined control. A `ds-btn-primary`
-     existed for the hero CTAs that the WC/MultiSport shells were removed to
-     house; nothing in the news surface calls it now. Add it back when a
-     pitch-filled action has a real home. */
-  .ds-btn-secondary {
-    @apply inline-flex items-center justify-center min-h-11 px-4 py-2 rounded-control border border-line/50 bg-panel/70 text-chalk font-display font-semibold tracking-wide hover:bg-overlay/10 ds-press;
-  }
-  /* No `.ds-input` here: the header's search box was the last <input> in the
-     app, and the class went with it rather than staying as a rule nothing
-     renders (its contrast test went too — it pinned the `chalkdim` boundary for
-     a control that no longer exists). Add both back with the first real form
-     field, along with the SC 1.4.11 check the test carried. */
 
   /* Mono caption — use instead of repeating font-mono text-caption */
   .ds-caption {
@@ -261,29 +241,6 @@
   .ds-signal::after {
     width: var(--signal, 0%);
     background: rgb(var(--signal-accent, var(--c-pitch)));
-  }
-}
-
-/* Tactile press feedback for any pressable (buttons, tabs, cards). Scoped
-   transition (never `all`) covering hover colors + the press scale. A utility
-   rather than a component class because `.ds-btn-secondary` applies it, and
-   Tailwind 4 only lets @apply reach utilities. */
-@utility ds-press {
-  transition:
-    transform 150ms var(--ease-out),
-    color 150ms var(--ease-out),
-    background-color 150ms var(--ease-out),
-    border-color 150ms var(--ease-out),
-    box-shadow 150ms var(--ease-out),
-    opacity 150ms var(--ease-out),
-    filter 150ms var(--ease-out);
-  &:active {
-    transform: scale(0.97);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    &:active {
-      transform: none;
-    }
   }
 }
 

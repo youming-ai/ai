@@ -3,6 +3,9 @@ import type { Env } from '../data/api';
 import { SITE_ORIGIN } from '../site';
 import { sleep } from '../utils/coerce';
 import { canonicalizeUrl, ingestAllSources, knownCanonicalUrls, knownFingerprints } from './ingest';
+import { FEED_SOURCES } from './sources';
+
+const TEST_SOURCE = FEED_SOURCES[0]!;
 
 // File-scoped, not inside a describe. Two blocks here stub `fetch`, and a hook
 // bound to one of them let the other's stub outlive its test — the next case
@@ -43,7 +46,7 @@ function item(title: string, link: string, description = 'x'): string {
  *  every article INSERT so a test can assert on what reached the database
  *  rather than on what the report claims. */
 function ingestDb(
-  { changes = 1, enabled = ['toms-hardware'] }: { changes?: number; enabled?: string[] } = {},
+  { changes = 1, enabled = [TEST_SOURCE.id] }: { changes?: number; enabled?: string[] } = {},
   stored: { fingerprints?: string[]; urls?: string[] } = {},
 ) {
   const inserted: unknown[][] = [];
@@ -303,7 +306,7 @@ describe('the fetch retry policy', () => {
     const report = await ingestAllSources(envWith(ingestDb().db));
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(report.failed).toEqual(['toms-hardware']);
+    expect(report.failed).toEqual([TEST_SOURCE.id]);
     expect(report.fetched).toBe(0);
   });
 
@@ -314,7 +317,7 @@ describe('the fetch retry policy', () => {
     const report = await ingestAllSources(envWith(ingestDb().db));
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(report.failed).toEqual(['toms-hardware']);
+    expect(report.failed).toEqual([TEST_SOURCE.id]);
     expect(report.fetched).toBe(0);
   });
 
@@ -325,7 +328,7 @@ describe('the fetch retry policy', () => {
     const report = await ingestAllSources(envWith(ingestDb().db));
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(report.failed).toEqual(['toms-hardware']);
+    expect(report.failed).toEqual([TEST_SOURCE.id]);
   });
 
   it('bounds every attempt with the same deadline', async () => {
@@ -383,6 +386,14 @@ describe('the report does not overstate what it stored', () => {
 });
 
 describe('sources that are disabled', () => {
+  it('leaves retired sources inert even if their D1 enabled flag is still set', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const report = await ingestAllSources(envWith(ingestDb({ enabled: ['toms-hardware'] }).db));
+    expect(report.sources).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('fetches nothing when no source is enabled, without calling upstream', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
@@ -402,9 +413,8 @@ describe('the freshness window and the per-source cap', () => {
   }
 
   it('drops items older than the window before anything else happens', async () => {
-    // Nine of the desk's twelve feeds are archives: openai.com/news returned
-    // 1247 items on the day this shipped. Without the window the first tick
-    // stores years of history.
+    // Archive-sized feeds such as OpenAI and Vercel must be windowed before
+    // the per-source cap, so a first tick cannot collect years of history.
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -424,9 +434,10 @@ describe('the freshness window and the per-source cap', () => {
   });
 
   it('keeps the newest maxItems and reports the rest as trimmed', async () => {
-    // toms-hardware is capped at 30 and returned 50 items when the desk was
-    // built; the cap is what bounds a tick.
-    const items = Array.from({ length: 35 }, (_, index) => datedItem(index, index * 0.01));
+    // Exercise the registry cap even when the active source list changes.
+    const items = Array.from({ length: TEST_SOURCE.maxItems + 5 }, (_, index) =>
+      datedItem(index, index * 0.01),
+    );
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(new Response(feedOf(...items), { status: 200 })),
@@ -435,21 +446,21 @@ describe('the freshness window and the per-source cap', () => {
     const { db, inserted } = ingestDb();
     const report = await ingestAllSources(envWith(db));
 
-    expect(report.fetched).toBe(30);
+    expect(report.fetched).toBe(TEST_SOURCE.maxItems);
     expect(report.trimmed).toBe(5);
     // Newest first: story 0 is the freshest and must survive the cap, the five
     // oldest must not.
     const urls = inserted.map((params) => params[2]);
     expect(urls).toContain('https://example.com/0');
-    expect(urls).not.toContain('https://example.com/34');
-    expect(urls).toHaveLength(30);
+    expect(urls).not.toContain(`https://example.com/${TEST_SOURCE.maxItems + 4}`);
+    expect(urls).toHaveLength(TEST_SOURCE.maxItems);
   });
 
   it('reports fetched and trimmed as one population', async () => {
     // The two counts together are what the source actually offered; a tick that
     // silently dropped items without saying so is what the log line is for.
     const items = [
-      ...Array.from({ length: 32 }, (_, index) => datedItem(index, 0)),
+      ...Array.from({ length: TEST_SOURCE.maxItems + 2 }, (_, index) => datedItem(index, 0)),
       datedItem(99, 90),
     ];
     vi.stubGlobal(
@@ -459,7 +470,7 @@ describe('the freshness window and the per-source cap', () => {
 
     const report = await ingestAllSources(envWith(ingestDb().db));
 
-    expect(report.fetched + report.trimmed).toBe(33);
-    expect(report.fetched).toBe(30);
+    expect(report.fetched + report.trimmed).toBe(TEST_SOURCE.maxItems + 3);
+    expect(report.fetched).toBe(TEST_SOURCE.maxItems);
   });
 });

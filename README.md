@@ -1,6 +1,6 @@
 # AI Desk
 
-> AI-hardware desk on Cloudflare Workers. A cron pulls a registry of hardware and AI-industry RSS feeds into D1, a model curates every new story (category, tags, summary, blurb, quality score, on-beat gate), and Astro renders the result as a fast masonry board with category hubs and RSS feeds.
+> A discovery desk for useful tools, thoughtful design, software craft and AI. A Cloudflare cron collects independent RSS sources into D1, a model selects links worth using, learning from or appreciating, and Astro renders a fast masonry board with category hubs and RSS feeds.
 
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/youming-ai/ai)
 [![Bun](https://img.shields.io/badge/bun-%3E%3D1.4.2-black)](https://bun.sh) [![Astro](https://img.shields.io/badge/Astro-7.x-ff5d01)](https://astro.build) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
@@ -8,6 +8,25 @@
 *No ads, no tracking, no reader-side JS framework. The source registry in `src/feeds/sources.ts`, the taxonomy in `src/categories.ts` and the classifier prompt in `src/feeds/llm.ts` are yours to replace — the first two feed the third automatically.*
 
 ---
+
+## Editorial direction
+
+The desk favours discoveries worth saving over comprehensive news coverage:
+useful products and open-source projects, distinctive design, practical engineering,
+original essays and substantive AI advances. Hardware remains a supporting beat.
+Poche is a reference for the selection style, not a feed dependency.
+
+Sources: Simon Willison, GitHub Blog, Cloudflare Blog, OpenAI News, NVIDIA Blog,
+Martin Fowler, Vercel Blog, Sidebar, Smashing Magazine and Product Hunt. These were
+probed with the real parser on 2026-10-19. Launch feeds have small caps and thin
+promotion is rejected by the curator rather than rewarded for being new.
+
+New curation can use the discovery categories, Web3 and hardware beats; the rail
+puts discovery first. Existing stories, category URLs and dedupe records stay in
+place. Changing the policy does not reclassify the archive or reset failed attempts.
+Collection remains store-first, so new uncurated links are visible until reviewed;
+this is not a human approval queue. The prompt defines the editorial policy, while
+the existing validator enforces its JSON shape. Taste still needs review on real links.
 
 ## Features
 
@@ -67,8 +86,8 @@ All knobs are code, not env spaghetti. Edit one file per concern:
 |---------|------|-------|
 | Branding / origin | `src/site.ts` | `SITE_ORIGIN`, `SITE_NAME`, `SITE_TITLE`, `SITE_DESCRIPTION` |
 | Icons / social card | `scripts/brand-mark.ts` → `public/logo.svg`, `public/favicon.svg`, `public/og.svg` | The SVGs are generated (the impossible-triangle mark is computed, not drawn): change the script, run `bun scripts/brand-mark.ts`, then rasterize `og.svg` to `og.png` (the default `og:image`) with `sips` on macOS, or any SVG rasterizer elsewhere (e.g. `rsvg-convert -w 1200 public/og.svg -o public/og.png`) |
-| Taxonomy | `src/categories.ts` | `CATEGORIES` — keys become `/:category` routes. The `hardware` group is also what the classifier prompt is built from |
-| Sources | `src/feeds/sources.ts` | The 12 feeds, in authority order (which is also the cross-source dedupe precedence), each with a per-tick `maxItems` cap; `INGEST_MAX_AGE_MS` is the freshness window |
+| Taxonomy | `src/categories.ts` | `CATEGORIES` — keys become `/:category` routes. Every key feeds the classifier prompt; Web3 retains the historical `crypto` key |
+| Sources | `src/feeds/sources.ts` | The 10 measured discovery feeds, in authority order (which is also the cross-source dedupe precedence), each with a per-tick `maxItems` cap; `INGEST_MAX_AGE_MS` is the freshness window |
 | Curator | `src/feeds/llm.ts`, `src/feeds/curate.ts` | The prompt and the validators, `CURATION_LIMIT` (per tick), `CURATION_BATCH_SIZE`, `MAX_CURATION_ATTEMPTS` |
 | Endpoint | `wrangler.toml` `[vars]` | `LLM_BASE_URL`, `LLM_MODEL`; the key is a secret |
 | Retention | `src/feeds/retention.ts` | `ARTICLE_ARCHIVE_DAYS` (default 90) |

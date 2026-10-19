@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
+import { categoryLabel } from '../categories';
 import type { Env } from '../data/api';
 import { canonicalCategory, normalizeTitle, storeArticle } from './enrich';
 import type { RawArticle } from './types';
@@ -87,6 +88,13 @@ describe('canonicalCategory', () => {
     expect(canonicalCategory('Design')).toBe('design');
     expect(canonicalCategory('Tools')).toBe('tools');
     expect(canonicalCategory('Development')).toBe('development');
+  });
+
+  it('shows Web3 while preserving the historical crypto key and label', () => {
+    expect(canonicalCategory('Web3')).toBe('crypto');
+    expect(canonicalCategory('web3')).toBe('crypto');
+    expect(canonicalCategory('Crypto')).toBe('crypto');
+    expect(categoryLabel('crypto')).toBe('Web3');
   });
 
   it('returns null for unknown values so they fall through to the global board', () => {

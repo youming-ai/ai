@@ -4,11 +4,24 @@ import { articleDeck } from '../../site';
 import type { ExploreArticle } from '../../types';
 import { attr, type Html, html } from '../html';
 
-/** UTC-only, so the server's time zone never leaks into the markup. */
-function publishedDate(timestamp: number): string {
-  if (!Number.isFinite(timestamp) || timestamp <= 0) return '';
-  const d = new Date(timestamp);
-  return `${String(d.getUTCMonth() + 1).padStart(2, '0')}/${String(d.getUTCDate()).padStart(2, '0')}`;
+/** Relative labels for recent stories; the full UTC date is always available. */
+function publishedTime(timestamp: number): Html {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return html``;
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return html``;
+  const iso = date.toISOString();
+  const age = Math.max(0, Date.now() - timestamp);
+  const minutes = Math.floor(age / 60_000);
+  const hours = Math.floor(age / 3_600_000);
+  const label =
+    minutes < 1
+      ? 'Just now'
+      : minutes < 60
+        ? `${minutes}m ago`
+        : hours < 48
+          ? `${hours}h ago`
+          : `${String(date.getUTCMonth() + 1).padStart(2, '0')}/${String(date.getUTCDate()).padStart(2, '0')}`;
+  return html`<time datetime="${iso}" title="${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC" class="shrink-0 tabular-nums">${label}</time>`;
 }
 
 function scoreValue(value: number): number {
@@ -16,8 +29,7 @@ function scoreValue(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-/** Accent for a 0–100 signal. The top strip is editorial quality, the bottom
- *  strip is freshness — same colour language reads across both. */
+/** One quality colour scale for the grid strip and the list indicator. */
 function signalAccent(score: number): 'pitch' | 'amber' | 'live' {
   if (score >= 75) return 'pitch';
   if (score >= 45) return 'amber';
@@ -37,7 +49,7 @@ export default function ExploreCard({
    *  the LCP element being a card image that had not started until layout. */
   priority?: boolean;
 }): Html {
-  const date = publishedDate(article.publishedAt);
+  const date = publishedTime(article.publishedAt);
   const score = scoreValue(article.qualityScore);
   const domain = article.sourceDomain || 'source';
   const description = articleDeck(article);
@@ -55,13 +67,16 @@ export default function ExploreCard({
   if (variant === 'list') {
     // The whole row is the outbound link: with no summary page, the card's job
     // is to hand the reader straight to the source.
-    return html`<li class="group flex items-baseline gap-3 px-3 py-2 hover:bg-overlay/5">
-      <a href="${article.url}" target="_blank" rel="noopener noreferrer" class="flex min-w-0 flex-1 items-baseline gap-3">
-        <span class="ds-caption hidden w-44 shrink-0 truncate text-pitch sm:block"><span aria-hidden="true">&gt;_ </span>${domain}</span>
-        <span class="min-w-0 flex-1 truncate font-display text-lead text-chalk transition-colors group-hover:text-pitch">${article.title}</span>
-        <span aria-hidden="true" class="hidden h-2 w-2 shrink-0 rounded-pill sm:inline-block" style="background-color:rgb(var(--c-${signalAccent(score)}))"></span>
-        <span class="ds-caption shrink-0 tabular-nums text-chalkdim">${date}</span>
-        <span class="sr-only">Curated signal ${score} of 100, published ${date}</span>
+    return html`<li class="group px-3 py-3 hover:bg-overlay/5 sm:py-2">
+      <a href="${article.url}" target="_blank" rel="noopener noreferrer" class="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-baseline sm:gap-3">
+        <span class="order-2 flex min-w-0 items-baseline justify-between gap-3 ds-caption text-chalkdim sm:order-1 sm:w-44 sm:shrink-0">
+          <span class="truncate">${domain}</span>
+          <span class="shrink-0 sm:hidden">${date}</span>
+        </span>
+        <span class="order-1 line-clamp-2 min-w-0 font-display text-lead text-chalk transition-colors group-hover:text-pitch sm:order-2 sm:block sm:flex-1 sm:truncate">${article.title}</span>
+        <span aria-hidden="true" title="Editorial quality: ${score}/100" class="order-3 hidden h-2 w-2 shrink-0 rounded-pill sm:inline-block" style="background-color:rgb(var(--c-${signalAccent(score)}))"></span>
+        <span class="order-4 hidden ds-caption text-chalkdim sm:inline">${date}</span>
+        <span class="sr-only">Editorial quality ${score} of 100. Opens in a new tab.</span>
       </a>
     </li>`;
   }
@@ -89,11 +104,12 @@ export default function ExploreCard({
     : html`<img data-card-media="true"${attr('fetchpriority', priority && 'high')} src="${imageUrl}" alt="" decoding="async" class="h-full w-full object-cover transition-opacity duration-300 opacity-100" loading="${priority ? 'eager' : 'lazy'}"/>`;
 
   return html`<article class="ds-signal contain-layout mb-3 overflow-hidden break-inside-avoid rounded-card border border-line/40 bg-panel/70" style="--signal:${score}%;--signal-accent:var(--c-${signalAccent(score)})">
-    <div class="flex items-center justify-between border-b border-line/40 px-3 py-1.5 ds-caption text-pitch">
-      <div class="flex min-w-0 items-center gap-2"><span aria-hidden="true">&gt;_</span><span class="truncate">${domain}</span></div>
-      <span class="inline-flex items-center gap-1 text-chalkdim" title="Source: ${domain}"><span class="hidden text-[10px] tracking-tight sm:inline">source</span><span aria-hidden="true">↗</span></span>
-    </div>
     <a href="${article.url}" target="_blank" rel="noopener noreferrer" class="group block">
+      <div class="flex min-w-0 items-center justify-between gap-2 border-b border-line/40 px-3 py-2 ds-caption text-chalkdim">
+        <span class="truncate" title="Source: ${domain}">${domain}</span>
+        <span aria-hidden="true" class="shrink-0">↗</span>
+        <span class="sr-only">Opens in a new tab.</span>
+      </div>
       ${imageUrl && html`<div data-image-frame="true" class="aspect-video w-full overflow-hidden bg-overlay/5"${attr('style', frameStyle)}>${media}</div>`}
       <div class="p-3">
         <h2 class="font-display text-lead font-bold leading-lead text-chalk transition-colors duration-150 group-hover:text-pitch">${article.title}</h2>
@@ -105,7 +121,7 @@ export default function ExploreCard({
             html`<span class="text-chalkdim">${article.category ? ' · ' : ''}${article.tags.slice(0, 3).join(', ')}</span>`
           }</p>`
         }
-        <p class="mt-1 flex items-center gap-2 ds-caption text-chalkdim"><span class="ml-auto shrink-0 tabular-nums">${date}</span><span class="sr-only">Curated signal ${score} of 100, published ${date}</span></p>
+        <p class="mt-2 flex items-center justify-between gap-2 ds-caption text-chalkdim"><span title="Editorial quality: ${score} out of 100">Quality ${score}<span class="sr-only"> out of 100</span></span>${date}</p>
       </div>
     </a>
   </article>`;
