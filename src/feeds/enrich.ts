@@ -2,9 +2,6 @@ import { CATEGORIES } from '../categories';
 import type { Env } from '../data/api';
 import type { ArticleEnrichment, RawArticle } from './types';
 
-/** Quality score when the source declares no authority rating. */
-const DEFAULT_QUALITY_SCORE = 50;
-
 export function canonicalCategory(value: string | null): string | null {
   if (!value) return null;
   const candidate = value.trim().toLowerCase();
@@ -40,10 +37,10 @@ export async function storeArticle(env: Env, article: RawArticle): Promise<boole
   // ponytail: summary and blurb duplicate description to populate legacy D1 columns (ai_summary/ai_blurb)
   const summary = article.description || article.title;
   const blurb = summary;
-  // Single curated source today, so the score is the source's authority
-  // rating; cards render it as the "Curated signal" meter. Falls back to a
-  // neutral midpoint when no authority is declared.
-  const qualityScore = article.sourceAuthority || DEFAULT_QUALITY_SCORE;
+  // Uncurated rows score 0 until the curator writes a real one. The board sorts
+  // by score within a day, and seeding the source's authority (75–90) ranked
+  // every unjudged story above the curated ones (55–72 on a measured tick).
+  const qualityScore = 0;
 
   const result = await env.DB.prepare(
     `INSERT INTO articles (

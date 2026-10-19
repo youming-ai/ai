@@ -77,6 +77,18 @@ export const EXPLORE_ARTICLE_COLUMNS =
   `${LIVE_FRESHNESS}, ` +
   "COALESCE((SELECT json_group_array(at.tag) FROM article_tags at WHERE at.article_id = a.id), '[]') AS tags";
 
+/** Feed markup that reached storage before `parseRss` decoded escaped bodies.
+ *  Only common body tags, so a literal like `<dialog>` in prose survives. */
+const STORED_FEED_MARKUP =
+  /<\/?(?:p|a|br|div|span|img|b|i|strong|em|ul|ol|li|blockquote|figure|figcaption|h[1-6])\b[^>]*>/gi;
+
+function feedText(value: unknown): string {
+  const text = rowString(value);
+  return text.includes('<')
+    ? text.replace(STORED_FEED_MARKUP, ' ').replace(/\s+/g, ' ').trim()
+    : text;
+}
+
 export function exploreArticle(row: ExploreRow): ExploreArticle {
   // The video judgement reads the URL as the feed delivered it — before the
   // /media rewrite, which can strip the extension the check depends on.
@@ -84,9 +96,9 @@ export function exploreArticle(row: ExploreRow): ExploreArticle {
   return {
     id: rowString(row.id),
     title: rowString(row.title),
-    description: rowString(row.description),
-    summary: rowString(row.ai_summary),
-    blurb: rowString(row.ai_blurb),
+    description: feedText(row.description),
+    summary: feedText(row.ai_summary),
+    blurb: feedText(row.ai_blurb),
     url: rowString(row.canonical_url),
     // Upstream-hosted images are rewritten to /media so the feed's own CDN
     // origin never reaches markup, the payload, or og:image.

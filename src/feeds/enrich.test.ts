@@ -56,20 +56,15 @@ function makeStoreEnv() {
 }
 
 describe('storeArticle', () => {
-  it('stores articles as published with quality score', async () => {
+  it('stores articles as published with a zero score until curated', async () => {
     const { env, bound } = makeStoreEnv();
     await storeArticle(env, ARTICLE);
     expect(bound[0][0]).toBe('fp-1'); // id
     expect(bound[0][14]).toBe('design'); // category
     expect(bound[0][15]).toBe('link'); // article_type
-    expect(bound[0][17]).toBe(90); // quality_score
+    // Not the source's authority: that ranked unjudged stories above curated ones.
+    expect(bound[0][17]).toBe(0); // quality_score
     expect(bound[0][18]).toBe('published'); // status
-  });
-
-  it('falls back to a neutral score without source authority', async () => {
-    const { env, bound } = makeStoreEnv();
-    await storeArticle(env, { ...ARTICLE, sourceAuthority: 0 });
-    expect(bound[0][17]).toBe(50); // quality_score
   });
 
   it('writes no topic tag for the category', async () => {

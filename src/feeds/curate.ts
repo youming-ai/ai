@@ -230,8 +230,8 @@ export async function curatePending(env: Env): Promise<CurationReport> {
     failed: 0,
   };
   // Not configured is a resting state, not an error: the site is designed to
-  // serve uncurated rows (the feed teaser is the deck and the source's authority
-  // is the score), so a deployment without the secret degrades to the pre-LLM
+  // serve uncurated rows (the feed teaser is the deck and the score is 0, so
+  // they sort below curated stories), so a deployment without the secret degrades to the pre-LLM
   // behaviour and says so in the report.
   if (!report.configured) return report;
 

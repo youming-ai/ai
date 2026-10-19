@@ -73,8 +73,13 @@ export function parseRss(
     try {
       const title = stripHtml(tagValue(block, ['title']));
       const url = linkValue(block).trim();
+      // A body is HTML, and RSS `<description>` / Atom `type="html"` carry it
+      // entity-escaped (`&lt;p&gt;`), so decode once before stripping: stripping
+      // first left Product Hunt's, Simon Willison's and Martin Fowler's
+      // teasers on the board as literal `<p>`/`<a href>` text. A literal that
+      // was meant as text arrives double-escaped and survives as `<dialog>`.
       const description = stripHtml(
-        tagValue(block, ['description', 'content:encoded', 'summary', 'content']),
+        decodeEntities(tagValue(block, ['description', 'content:encoded', 'summary', 'content'])),
       ).slice(0, 4000);
       const publishedRaw = decodeEntities(
         tagValue(block, ['pubDate', 'published', 'updated', 'dc:date']),
