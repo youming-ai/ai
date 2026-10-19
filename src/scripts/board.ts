@@ -53,7 +53,7 @@ function initAppend(board: HTMLElement): void {
       board.insertAdjacentHTML('beforeend', page.html);
       // Wire only what arrived. The React version got this for free — every
       // appended card mounted its own effects — and forgetting it meant page 2
-      // onwards had no broken-image handling, no transform fallback and no
+      // onwards had no broken-image handling and no
       // playing video previews.
       wireMedia(Array.from(board.children).slice(existing));
       cursor = page.nextCursor ?? '';
@@ -216,19 +216,7 @@ function wireMedia(roots: (Element | Document)[]): void {
       media.classList.remove('opacity-100');
       media.classList.add('opacity-0');
     }
-    // One retry with the URL the feed gave us, then give up. The card asks the
-    // publisher's CDN for a card-sized image (src/images.ts), and a publisher
-    // that changes its parameters answers 404/400 rather than serving the
-    // original — measured, which is why this exists instead of trusting the
-    // rewrite. Not `{ once: true }`: the retry needs this same handler.
-    let retried = false;
     const onError = () => {
-      const original = media.dataset.originalSrc;
-      if (!retried && original && media.getAttribute('src') !== original) {
-        retried = true;
-        media.setAttribute('src', original);
-        return;
-      }
       frame.classList.remove('animate-pulse');
       hide(media);
     };

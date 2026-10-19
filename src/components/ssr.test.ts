@@ -241,13 +241,14 @@ it('serves our own media route as a root-relative path', () => {
   expect(html).toContain('src="/media/437e368b-c40c-4e02-8e06-2ca5bbcb8055"');
   expect(html).not.toContain(`src="${SITE_ORIGIN}/media/`);
   // And the third-party one is still absolute — that is not ours to re-point.
-  expect(html).toContain('src="https://images.ctfassets.net/a/b/photo.png?');
+  expect(html).toContain('src="https://images.ctfassets.net/a/b/photo.png"');
 });
 
-it('asks the publisher CDN for a card-sized image, keeping the original as a fallback', () => {
-  // Through the real renderer, so the transform is pinned where it is applied
-  // rather than only in src/images.ts. The fallback attribute is what
-  // src/scripts/board.ts retries with.
+it.each([
+  'https://images.ctfassets.net/a/b/photo.png',
+  'https://cdn.shopify.com/s/files/1/photo.jpg',
+  'https://pbs.twimg.com/media/abc.jpg',
+])('uses the feed image URL unchanged: %s', (imageUrl) => {
   const html = ExploreView({
     initialData: {
       items: [
@@ -258,8 +259,7 @@ it('asks the publisher CDN for a card-sized image, keeping the original as a fal
           summary: '',
           blurb: '',
           url: 'https://example.com/story',
-          // A host whose convention was measured (1241 KB -> 58 KB).
-          imageUrl: 'https://images.ctfassets.net/a/b/photo.png',
+          imageUrl,
           isVideo: false,
           imageWidth: 0,
           imageHeight: 0,
@@ -276,10 +276,8 @@ it('asks the publisher CDN for a card-sized image, keeping the original as a fal
     initialFilters: { categories: [] },
   }).value;
 
-  expect(html).toContain(
-    'src="https://images.ctfassets.net/a/b/photo.png?w=900&amp;fm=webp&amp;q=75"',
-  );
-  expect(html).toContain('data-original-src="https://images.ctfassets.net/a/b/photo.png"');
+  expect(html).toContain(`src="${imageUrl}"`);
+  expect(html).not.toContain('data-original-src');
 });
 
 it('renders the layout and theme controls with the rail, not in a toolbar', () => {

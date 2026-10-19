@@ -553,34 +553,9 @@ describe('card media', () => {
     expect(play).toHaveBeenCalledOnce();
   });
 
-  it('retries once with the feed URL before hiding an image', async () => {
-    // The card asks the publisher's CDN for a card-sized image, and a publisher
-    // that changes its parameters answers 404/400 rather than degrading. So a
-    // failed transform costs one wasted request, not a missing card image.
-    const { container } = render(
-      ExploreView({
-        initialData: feed([card('a', 'story')], null),
-        initialFilters: { categories: [] },
-      }),
-    );
-    await startBoard();
-
-    const image = container.querySelector<HTMLImageElement>('img[data-card-media]');
-    expect(image).not.toBeNull();
-    image!.setAttribute('data-original-src', 'https://example.com/full-size.png');
-
-    image!.dispatchEvent(new Event('error'));
-    expect(image!.getAttribute('src')).toBe('https://example.com/full-size.png');
-    expect(image!.style.display).not.toBe('none');
-
-    // A second failure on the retried URL is real: hide it.
-    image!.dispatchEvent(new Event('error'));
-    expect(image!.style.display).toBe('none');
-  });
-
   it('wires the media inside an appended page, not only the first one', async () => {
     // Regression: `wireMedia` ran once at startup, so cards from page 2 onwards
-    // had no broken-image handling, no transform fallback and a video preview
+    // had no broken-image handling and a video preview
     // that never started. The React version could not have this bug — every
     // appended card mounted its own effects.
     const { play } = stubPlayback();
@@ -592,8 +567,7 @@ describe('card media', () => {
             // Wrapped in <article> the way a real card is: the frame sits
             // inside the card, which is what wireMedia walks.
             html:
-              '<article><div data-image-frame><img data-card-media src="/broken.png" ' +
-              'data-original-src="/full.png"></div></article>' +
+              '<article><div data-image-frame><img data-card-media src="/broken.png"></div></article>' +
               '<article><div data-image-frame><video data-preview data-card-media ' +
               'preload="none"></video></div></article>',
             nextCursor: null,
@@ -616,11 +590,11 @@ describe('card media', () => {
       expect(container.querySelector('[data-board]')?.innerHTML).toContain('broken.png'),
     );
 
-    // The appended image gets the same transform fallback as a first-page one.
+    // Broken images are hidden on appended pages too.
     const appended = container.querySelector<HTMLImageElement>('img[src="/broken.png"]');
     expect(appended).not.toBeNull();
     appended!.dispatchEvent(new Event('error'));
-    expect(appended!.getAttribute('src')).toBe('/full.png');
+    expect(appended!.style.display).toBe('none');
 
     // And the appended video preview is started, not left as a dark box.
     const video = container.querySelector<HTMLVideoElement>('video[data-card-media]');
