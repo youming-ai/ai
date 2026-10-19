@@ -8,10 +8,8 @@
 // is what holds it.
 //
 // Everything here is progressive enhancement: with JavaScript off the board
-// still renders, the rail still navigates, and "Load more" becomes a link-less
-// button that does nothing. Nothing is hidden until JS runs.
-
-const LOAD_MORE_LABEL = 'Load more stories';
+// still renders and the rail still navigates. Scrolling loads subsequent pages
+// when JavaScript is available.
 
 /** Infinite scroll, driven by one sentinel. The server renders the page; this
  *  appends the next one's HTML rather than rendering anything itself, so the
@@ -23,7 +21,6 @@ function initAppend(board: HTMLElement): void {
   // runs later and writes the cursor back onto the sentinel.
   const sentinel: HTMLElement = found;
 
-  const more = sentinel.querySelector<HTMLButtonElement>('[data-board-more]');
   const loading = sentinel.querySelector<HTMLElement>('[data-board-loading]');
   const failed = sentinel.querySelector<HTMLElement>('[data-board-error]');
   const end = sentinel.querySelector<HTMLElement>('[data-board-end]');
@@ -33,31 +30,11 @@ function initAppend(board: HTMLElement): void {
   let cursor = sentinel.dataset.cursor ?? '';
   let busy = false;
 
-  const showEnd = () => {
-    if (more) more.hidden = true;
-    if (end) end.hidden = false;
-  };
-  const showMore = () => {
-    if (more) {
-      more.hidden = false;
-      more.disabled = false;
-      more.textContent = LOAD_MORE_LABEL;
-    }
-    if (end) end.hidden = true;
-  };
-
-  if (!cursor) {
-    showEnd();
-    return;
-  }
+  if (!cursor) return;
 
   async function load(): Promise<void> {
     if (busy || !cursor) return;
     busy = true;
-    if (more) {
-      more.disabled = true;
-      more.textContent = 'Loading…';
-    }
     if (loading) loading.hidden = false;
     if (failed) failed.hidden = true;
 
@@ -81,8 +58,7 @@ function initAppend(board: HTMLElement): void {
       wireMedia(Array.from(board.children).slice(existing));
       cursor = page.nextCursor ?? '';
       sentinel.dataset.cursor = cursor;
-      if (cursor) showMore();
-      else showEnd();
+      if (end) end.hidden = Boolean(cursor);
     } catch (error) {
       // The reader keeps what they already had, and is told what happened —
       // 502 from the endpoint, or no network at all.
@@ -91,26 +67,32 @@ function initAppend(board: HTMLElement): void {
         failed.textContent =
           error instanceof Error ? error.message : 'Could not load the news feed.';
       }
-      if (more) {
-        more.disabled = false;
-        more.textContent = LOAD_MORE_LABEL;
-      }
+      return;
     } finally {
       busy = false;
       if (loading) loading.hidden = true;
     }
+
+    // Appending can leave the sentinel inside the preload margin, especially
+    // on wide grids or short pages. A fresh observation checks its new position
+    // even if it never crossed an intersection threshold. Only rearm after a
+    // success, so an unavailable endpoint cannot cause an automatic retry loop.
+    observer?.unobserve(sentinel);
+    if (cursor) observer?.observe(sentinel);
+    else observer?.disconnect();
   }
 
-  more?.addEventListener('click', () => void load());
-  // rootMargin so the next page starts arriving before the reader reaches the
-  // bottom; appending rows fires no new intersection event, but the sentinel
-  // keeps moving, so the same observer fires again.
-  new IntersectionObserver(
-    (entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) void load();
-    },
-    { rootMargin: '600px' },
-  ).observe(sentinel);
+  // Start fetching before the reader reaches the bottom.
+  const observer =
+    typeof IntersectionObserver === 'undefined'
+      ? null
+      : new IntersectionObserver(
+          (entries) => {
+            if (entries.some((entry) => entry.isIntersecting)) void load();
+          },
+          { rootMargin: '600px' },
+        );
+  observer?.observe(sentinel);
 }
 
 /** Theme switching for every instance on the page (the rail renders the control
@@ -277,4 +259,5 @@ wireMedia([document]);
 const board = document.querySelector<HTMLElement>('[data-board]');
 if (board) initAppend(board);
 initTheme();
+
 export {};

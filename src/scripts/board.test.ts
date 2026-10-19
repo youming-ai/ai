@@ -150,7 +150,46 @@ afterEach(() => {
 });
 
 describe('board appends the next page', () => {
-  it('fetches the next page from the button and inserts the server-rendered HTML', async () => {
+  it.each(['grid', 'list'] as const)(
+    'continues scrolling in %s when the sentinel stays in range after an append',
+    async (view) => {
+      const tag = view === 'list' ? 'li' : 'article';
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ html: `<${tag}>second story</${tag}>`, nextCursor: 'cur-2' }),
+          ),
+        )
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ html: `<${tag}>last story</${tag}>`, nextCursor: null })),
+        );
+      vi.stubGlobal('fetch', fetchMock);
+      // A new observation reports the current intersection even when the
+      // sentinel never left the viewport between pages.
+      vi.spyOn(FakeIntersectionObserver.prototype, 'observe').mockImplementation(() => {
+        queueMicrotask(() => observers.at(-1)?.([{ isIntersecting: true }]));
+      });
+      const { container } = render(
+        ExploreView({
+          initialData: feed([card('a', 'first story')], 'cur-1'),
+          initialFilters: { categories: [] },
+          initialView: view,
+        }),
+      );
+      await startBoard();
+
+      await waitFor(() => {
+        expect(container.querySelector('[data-board]')?.textContent).toContain('last story');
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(container.querySelector('[data-board-more]')).toBeNull();
+      expect(String(fetchMock.mock.calls[1]?.[0])).toContain('cursor=cur-2');
+      expect(String(fetchMock.mock.calls[1]?.[0])).toContain(`view=${view}`);
+    },
+  );
+
+  it('automatically fetches the next page and inserts the server-rendered HTML', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ html: '<article>second story</article>', nextCursor: null }), {
         status: 200,
@@ -167,7 +206,7 @@ describe('board appends the next page', () => {
     );
     await startBoard();
 
-    fireEvent.click(container.querySelector('[data-board-more]')!);
+    observers.at(-1)?.([{ isIntersecting: true }]);
 
     await waitFor(() => {
       expect(container.querySelector('[data-board]')?.innerHTML).toContain('second story');
@@ -175,6 +214,7 @@ describe('board appends the next page', () => {
     const requested = String(fetchMock.mock.calls[0]?.[0]);
     expect(requested).toContain('cursor=cur-1');
     expect(requested).toContain('view=grid');
+    expect(container.querySelector('[data-board-more]')).toBeNull();
     // Scoped to the hub, or a category page would append the global board.
     expect(requested).toContain('category=tools');
   });
@@ -221,7 +261,7 @@ describe('board appends the next page', () => {
     );
     await startBoard();
 
-    fireEvent.click(container.querySelector('[data-board-more]')!);
+    observers.at(-1)?.([{ isIntersecting: true }]);
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
 
     // The appended markup has to match the container it lands in: <li> into the
@@ -231,10 +271,6 @@ describe('board appends the next page', () => {
   });
 
   it('says the feed has ended once the last page arrives', async () => {
-    // The defect this pins: the script looked for `[data-board-end]`, the markup
-    // never rendered it, and `showEnd()` therefore only hid the button — so
-    // exhausting the feed made "Load more" vanish with no explanation, where the
-    // React version it replaced had shown the note.
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -256,19 +292,14 @@ describe('board appends the next page', () => {
     expect(note, 'the end note is in the markup').not.toBeNull();
     expect(note!.hidden, 'hidden while another page exists').toBe(true);
 
-    fireEvent.click(container.querySelector('[data-board-more]')!);
+    observers.at(-1)?.([{ isIntersecting: true }]);
 
     await waitFor(() => expect(note!.hidden).toBe(false));
-    expect(container.querySelector('[data-board-more]')).not.toBeNull();
-    expect(container.querySelector<HTMLElement>('[data-board-more]')!.hidden).toBe(true);
+    expect(container.querySelector('[data-board-more]')).toBeNull();
     expect(note!.textContent).toContain('End of the feed');
   });
 
-  it('retries the same page when the reader asks again after a failure', async () => {
-    // The failure that motivated this: with a cursor held in state, "ask again"
-    // was an identical state update, so nothing re-ran and the button stayed
-    // enabled and inert until a reload. `load()` here is re-entrant once the
-    // in-flight guard clears, and this is what holds that.
+  it('retries the same page when scrolling back into range after a failure', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(new Response('nope', { status: 502 }))
@@ -290,12 +321,12 @@ describe('board appends the next page', () => {
     );
     await startBoard();
 
-    fireEvent.click(container.querySelector('[data-board-more]')!);
+    observers.at(-1)?.([{ isIntersecting: true }]);
     await waitFor(() =>
       expect(container.querySelector<HTMLElement>('[data-board-error]')?.hidden).toBe(false),
     );
 
-    fireEvent.click(container.querySelector('[data-board-more]')!);
+    observers.at(-1)?.([{ isIntersecting: true }]);
 
     await waitFor(() => {
       expect(container.querySelector('[data-board]')?.innerHTML).toContain('second story');
@@ -316,7 +347,7 @@ describe('board appends the next page', () => {
     );
     await startBoard();
 
-    fireEvent.click(container.querySelector('[data-board-more]')!);
+    observers.at(-1)?.([{ isIntersecting: true }]);
 
     const failed = await waitFor(() => {
       const element = container.querySelector<HTMLElement>('[data-board-error]');
@@ -324,9 +355,9 @@ describe('board appends the next page', () => {
       return element;
     });
     expect(failed?.textContent).toMatch(/unavailable/i);
-    // The reader keeps what they already had, and the button can be retried.
+    // A failure preserves the existing stories.
     expect(container.querySelector('[data-board]')?.innerHTML).toContain('first story');
-    expect(container.querySelector<HTMLButtonElement>('[data-board-more]')?.disabled).toBe(false);
+    expect(container.querySelector('[data-board-more]')).toBeNull();
   });
 
   it('shows the end of the feed once the last page arrives, and does not fetch again', async () => {
@@ -337,7 +368,7 @@ describe('board appends the next page', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    const { container } = render(
+    render(
       ExploreView({
         initialData: feed([card('a', 'first story')], 'cur-1'),
         initialFilters: { categories: [] },
@@ -345,7 +376,7 @@ describe('board appends the next page', () => {
     );
     await startBoard();
 
-    fireEvent.click(container.querySelector('[data-board-more]')!);
+    observers.at(-1)?.([{ isIntersecting: true }]);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
     observers.at(-1)?.([{ isIntersecting: true }]);
@@ -532,7 +563,7 @@ describe('card media', () => {
     );
     await startBoard();
 
-    fireEvent.click(container.querySelector('[data-board-more]')!);
+    observers.at(-1)?.([{ isIntersecting: true }]);
     await waitFor(() =>
       expect(container.querySelector('[data-board]')?.innerHTML).toContain('broken.png'),
     );

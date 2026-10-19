@@ -182,14 +182,9 @@ export default function ExploreView({
   // wrapper rather than on the grid/list inside `feed`. tabindex -1 keeps it out
   // of the tab order while letting the link move focus here.
   //
-  // Everything in the sentinel is written for `src/scripts/board.ts`, which is
-  // why it is present but inert in the HTML: with JavaScript off the button does
-  // nothing rather than being a dead-looking hidden control, and the
-  // end-of-feed note stays server-rendered and correct. Auto-load covers
-  // scrolling; the button is the keyboard / no-IO path. The end note is
-  // rendered whenever there is a board, and merely hidden while more pages
-  // exist: the script reveals it when the last page arrives, and it cannot
-  // reveal an element that is not there.
+  // The sentinel drives automatic scrolling in both layouts. Loading and
+  // failure messages are announced here; the end note is revealed after the
+  // final page and is already visible when the initial page is the last.
   return html`<div class="desk-shell">
     <div class="flex">
       <aside class="no-scrollbar sticky top-0 hidden h-screen w-52 shrink-0 self-start flex-col border-r border-line/40 lg:flex">
@@ -212,7 +207,6 @@ export default function ExploreView({
               <span class="sr-only">Loading more stories</span>
               ${[SKELETON_CARD, SKELETON_CARD, SKELETON_CARD, SKELETON_CARD]}
             </div>
-            ${cursor !== '' && html`<button type="button" data-board-more="true" class="ds-btn-secondary">Load more stories</button>`}
             <p data-board-error="true" hidden="" role="alert" class="ds-caption text-live"></p>
             <p data-board-end="true"${attr('hidden', cursor !== '')} class="ds-caption uppercase tracking-caption text-chalkdim">End of the feed</p>
           </div>`
