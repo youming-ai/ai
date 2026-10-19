@@ -68,7 +68,7 @@ class FakeIntersectionObserver {
   }
 }
 
-function stubMatchMedia(matches: boolean) {
+function stubMatchMedia(matches: boolean, light = false) {
   const listeners = new Set<() => void>();
   const query = {
     matches,
@@ -78,7 +78,11 @@ function stubMatchMedia(matches: boolean) {
   };
   vi.stubGlobal(
     'matchMedia',
-    vi.fn(() => query),
+    vi.fn((media: string) =>
+      media === '(prefers-color-scheme: light)'
+        ? { matches: light, addEventListener: vi.fn() }
+        : query,
+    ),
   );
   return {
     flip(next: boolean) {
@@ -403,6 +407,50 @@ describe('board appends the next page', () => {
 });
 
 describe('theme', () => {
+  it.each([true, false])('defaults to the system preference (light: %s)', async (light) => {
+    stubMatchMedia(false, light);
+    render(
+      ExploreView({
+        initialData: feed([card('a', 'story')], null),
+        initialFilters: { categories: [] },
+      }),
+    );
+    await startBoard();
+
+    expect(document.documentElement.dataset.theme).toBe(light ? 'light' : 'dark');
+    expect(localStorage.getItem('theme')).toBeNull();
+  });
+
+  it('follows system changes until the reader manually chooses a theme', async () => {
+    let onChange = () => {};
+    const system = {
+      matches: true,
+      addEventListener: (_: string, fn: () => void) => (onChange = fn),
+    };
+    const motion = { matches: false, addEventListener: vi.fn() };
+    vi.stubGlobal('matchMedia', (media: string) =>
+      media === '(prefers-color-scheme: light)' ? system : motion,
+    );
+    const { container } = render(
+      ExploreView({
+        initialData: feed([card('a', 'story')], null),
+        initialFilters: { categories: [] },
+      }),
+    );
+    await startBoard();
+    system.matches = false;
+    onChange();
+    expect(document.documentElement.dataset.theme).toBe('dark');
+
+    fireEvent.click(container.querySelector('[data-theme-toggle]')!);
+    system.matches = true;
+    onChange();
+    system.matches = false;
+    onChange();
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(localStorage.getItem('theme')).toBe('light');
+  });
+
   it('applies the stored choice and keeps both rail instances in step', async () => {
     const { container } = render(
       ExploreView({

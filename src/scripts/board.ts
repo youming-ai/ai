@@ -111,10 +111,16 @@ function initTheme(): void {
       return null; // private mode / storage disabled
     }
   };
+  const systemTheme = window.matchMedia('(prefers-color-scheme: light)');
+  const choice = stored();
+  let manualChoice: 'light' | 'dark' | null =
+    choice === 'light' || choice === 'dark' ? choice : null;
+  const preferred = (): 'dark' | 'light' =>
+    manualChoice ?? (systemTheme.matches ? 'light' : 'dark');
   const current = (): 'dark' | 'light' => {
     const applied = root.dataset.theme;
     if (applied === 'dark' || applied === 'light') return applied;
-    return stored() === 'light' ? 'light' : 'dark';
+    return preferred();
   };
 
   const paint = (): void => {
@@ -133,16 +139,21 @@ function initTheme(): void {
     }
   };
 
-  // Adopt the stored choice once, so the attribute the observer watches is
-  // always set — the server cannot know it, so it renders no icon.
-  const initial = current();
+  // Match the pre-paint script: use a saved choice or the system preference.
+  const initial = preferred();
   if (root.dataset.theme !== initial) root.dataset.theme = initial;
   paint();
   new MutationObserver(paint).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+  systemTheme.addEventListener('change', () => {
+    if (manualChoice) return;
+    root.dataset.theme = preferred();
+    paint();
+  });
 
   for (const button of buttons) {
     button.addEventListener('click', () => {
       const next = current() === 'light' ? 'dark' : 'light';
+      manualChoice = next;
       try {
         localStorage.setItem('theme', next);
       } catch {

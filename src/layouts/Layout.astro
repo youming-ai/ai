@@ -95,7 +95,12 @@ const canonicalUrl = `${SITE_ORIGIN}${canonicalPath}`;
             return null;
           }
         })();
-        const theme = choice === 'light' ? 'light' : 'dark';
+        const theme =
+          choice === 'light' || choice === 'dark'
+            ? choice
+            : window.matchMedia('(prefers-color-scheme: light)').matches
+              ? 'light'
+              : 'dark';
         const candidates = { dark: 'rgb(12 12 18)', light: 'rgb(245 246 251)' };
         document.documentElement.dataset.theme = theme;
         document
