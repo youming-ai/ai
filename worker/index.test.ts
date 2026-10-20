@@ -3,7 +3,6 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type Env, json, serveExplore } from '../src/data/api';
-import { CURATION_LIMIT } from '../src/feeds/curate';
 import { SITE_VERSION } from '../src/site';
 import worker from './index';
 
@@ -24,8 +23,7 @@ function mockEnv(kvData?: { body: string; at: number } | null): Env {
 
 // D1 mock: prepare() returns an object with both bind() and all() (the
 // filters query calls all() without bind), `all` resolved to an empty result
-// set unless overridden. `first` serves the health endpoint's single-row reads,
-// including the curation queue count.
+// set unless overridden. `first` serves single-row reads.
 function mockDb(overrides?: {
   all?: ReturnType<typeof vi.fn>;
   first?: ReturnType<typeof vi.fn>;
@@ -216,16 +214,7 @@ describe('fetch routing', () => {
     expect(await res.json()).toEqual({
       status: 'ok',
       version: SITE_VERSION,
-      checks: {
-        d1: 'ok',
-        cache: 'present',
-        // The dispatcher has to carry the curator's own state, not just
-        // liveness: a deployment without the LLM secret answers 200 everywhere
-        // while every card shows the publisher's raw teaser.
-        // Read from the curator rather than restated: the per-tick batch is a
-        // measured constant that has already changed once with the model.
-        curation: { configured: false, pending: 0, batch: CURATION_LIMIT },
-      },
+      checks: { d1: 'ok', cache: 'present' },
     });
   });
 

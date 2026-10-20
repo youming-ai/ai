@@ -7,8 +7,7 @@
 // RSS_HEADERS before changing parser or storage code" — and because the source
 // list itself is only as good as the last measurement. It reports, per source:
 // liveness, how many items actually parse, how much text each item carries (that
-// is the curator's input, and a feed with none is a source that costs a model
-// call to learn nothing), whether images and publisher categories survive, how
+// is the card's deck, and a feed with none renders bare titles), whether images and publisher categories survive, how
 // many items fall inside the freshness window, and the newest headline.
 //
 // It reads FEED_SOURCES rather than its own list on purpose: the point is to
@@ -68,7 +67,7 @@ async function probe(source: FeedSource, now: number): Promise<Probe> {
       type: (response.headers.get('content-type') ?? '').split(';')[0] ?? '',
       kb: Math.round(text.length / 1024),
       items: parsed.length,
-      // What ingest would actually hand the curator: window first, cap second.
+      // What ingest would actually store: window first, cap second.
       kept: Math.min(fresh.length, source.maxItems),
       medianChars: lengths.length ? lengths[Math.floor(lengths.length / 2)]! : 0,
       images: fresh.filter((item) => item.imageUrl).length,
@@ -114,7 +113,7 @@ const thin = results.filter((r) => r.status === 200 && r.kept > 0 && r.medianCha
 console.log(`\nlive and contributing: ${live.length}/${results.length}`);
 console.log(`would be trimmed to nothing (stale or over-cap): ${results.length - live.length}`);
 console.log(
-  `thin text (median under 40 chars, the curator's minimum): ${thin.map((r) => r.id).join(', ') || '(none)'}`,
+  `thin text (median under 40 chars, too thin for a card deck): ${thin.map((r) => r.id).join(', ') || '(none)'}`,
 );
 if (results.some((r) => r.status !== 200)) {
   console.log(

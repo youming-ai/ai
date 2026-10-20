@@ -15,18 +15,11 @@ vi.mock('@astrojs/cloudflare/handler', () => ({ handle }));
 // drift there once ran a second full ingest for weeks with nothing failing
 // loudly. Pinning the two strings in wrangler.toml (retention.cron.test.ts) does
 // not cover the comparison itself, so these tests drive it directly.
-const { ingestAllSources, pruneOldRecords, curatePending } = vi.hoisted(() => ({
+const { ingestAllSources, pruneOldRecords } = vi.hoisted(() => ({
   ingestAllSources: vi.fn(),
   pruneOldRecords: vi.fn(),
-  curatePending: vi.fn(),
 }));
 vi.mock('../src/feeds/ingest', () => ({ ingestAllSources }));
-vi.mock('../src/feeds/curate', async (importOriginal) => ({
-  // CURATION_LIMIT is a real value the health check reports; only the pass is
-  // mocked. Mocking the whole module would hand the import a limit of undefined.
-  ...(await importOriginal<typeof import('../src/feeds/curate')>()),
-  curatePending,
-}));
 vi.mock('../src/feeds/retention', async (importOriginal) => ({
   // PRUNE_CRON stays real: the comparison under test must use the same constant
   // the wrangler.toml binding test pins.
@@ -145,15 +138,6 @@ describe('entrypoint scheduled', () => {
     failed: [],
   };
 
-  const curation = {
-    configured: true,
-    selected: 0,
-    curated: 0,
-    filtered: 0,
-    skipped: 0,
-    failed: 0,
-  };
-
   function controller(cron: string): ScheduledController {
     return { cron, scheduledTime: 0, noRetry: () => {} } as unknown as ScheduledController;
   }
@@ -162,7 +146,6 @@ describe('entrypoint scheduled', () => {
     vi.clearAllMocks();
     ingestAllSources.mockResolvedValue(report);
     pruneOldRecords.mockResolvedValue(undefined);
-    curatePending.mockResolvedValue(curation);
   });
 
   it('runs the sweep on PRUNE_CRON and nothing else', async () => {
@@ -174,15 +157,7 @@ describe('entrypoint scheduled', () => {
   it('runs an ingest on the frequent tick and does not sweep', async () => {
     await entrypoint.scheduled!(controller('*/15 * * * *'), ENV, mockCtx());
     expect(ingestAllSources).toHaveBeenCalledOnce();
-    expect(curatePending).toHaveBeenCalledOnce();
     expect(pruneOldRecords).not.toHaveBeenCalled();
-  });
-
-  it('does not curate on the sweep tick', async () => {
-    // The sweep is the one tick that touches the corpus by age; running the
-    // curator there would spend model budget on the same schedule as a delete.
-    await entrypoint.scheduled!(controller(PRUNE_CRON), ENV, mockCtx());
-    expect(curatePending).not.toHaveBeenCalled();
   });
 
   it('treats an unrecognised schedule as an ingest tick', async () => {
@@ -227,11 +202,8 @@ describe('entrypoint scheduled', () => {
     await entrypoint.scheduled!(controller('*/15 * * * *'), ENV, mockCtx());
 
     // Failed sources stay at error — a source can fail every tick for a day with
-    // nothing else noticing. An unmapped publisher category is info now: the
-    // curator assigns the stored category from the story text, so the publisher's
-    // own vocabulary is a hint we ignore rather than a hole in the board. It is
-    // still logged, because the values are the only early signal that an upstream
-    // feed changed shape.
+    // nothing else noticing. An unmapped Poche category names the registry entry
+    // its stories are missing.
     expect(log).toHaveBeenCalledWith(
       expect.stringContaining('unregistered publisher category'),
       'Robotics',
@@ -248,38 +220,5 @@ describe('entrypoint scheduled', () => {
     await entrypoint.scheduled!(controller('*/15 * * * *'), ENV, mockCtx());
 
     expect(log).toHaveBeenCalledWith(expect.stringContaining('trimmed 1200/1203'));
-  });
-
-  it('warns when the curator has no configuration and says nothing else about it', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    curatePending.mockResolvedValue({ ...curation, configured: false });
-
-    await entrypoint.scheduled!(controller('*/15 * * * *'), ENV, mockCtx());
-
-    // The desk keeps collecting and serving; the queue is what grows, and
-    // /api/health is where that is visible.
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('not configured'));
-    expect(log).not.toHaveBeenCalledWith(expect.stringContaining('curated '));
-  });
-
-  it('logs what the curator did, and errors when it failed on stories', async () => {
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    curatePending.mockResolvedValue({
-      configured: true,
-      selected: 24,
-      curated: 14,
-      filtered: 7,
-      skipped: 2,
-      failed: 1,
-    });
-
-    await entrypoint.scheduled!(controller('*/15 * * * *'), ENV, mockCtx());
-
-    expect(log).toHaveBeenCalledWith(
-      expect.stringContaining('curated 14, filtered 7, skipped 2, failed 1 of 24'),
-    );
-    expect(error).toHaveBeenCalledWith(expect.stringContaining('curator failed on 1'));
   });
 });

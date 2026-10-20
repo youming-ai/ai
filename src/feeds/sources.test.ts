@@ -13,9 +13,8 @@ describe('feed sources', () => {
 
   it('caps every source, so no tick can be handed an unbounded feed', () => {
     // The cap is not decorative: openai.com/news returned 1247 items when the
-    // desk was built, and without a cap the first tick stores the whole archive
-    // while the curator spends its per-tick budget on old stories. A missing cap
-    // would be `slice(0, undefined)` — i.e. no cap at all — which is why the
+    // desk was built, and without a cap the first tick stores the whole archive.
+    // A missing cap would be `slice(0, undefined)` — i.e. no cap at all — which is why the
     // field is required by the type rather than optional with a default.
     for (const source of FEED_SOURCES) {
       expect(source.maxItems, `${source.id} has a cap`).toBeGreaterThanOrEqual(1);
@@ -23,8 +22,7 @@ describe('feed sources', () => {
   });
 
   it('keeps the freshness window at a week', () => {
-    // Nine of the twelve sources trim to nothing without a window (their feeds
-    // are archives), and the number is the desk's latency budget. Pinned so a
+    // The number is the desk's latency budget. Pinned so a
     // change is deliberate rather than incidental.
     expect(INGEST_MAX_AGE_MS).toBe(7 * 24 * 60 * 60 * 1000);
   });
@@ -39,32 +37,7 @@ describe('feed sources', () => {
     }
   });
 
-  it('orders sources by authority, because dedupe keeps the first claim', () => {
-    // A story syndicated across outlets is resolved to whichever source appears
-    // first, so the order is a ranking, not cosmetics.
-    const scores = FEED_SOURCES.map((source) => source.authorityScore);
-    expect([...scores].sort((a, b) => b - a)).toEqual(scores);
-  });
-
-  it('balances discovery sources and bounds the first ingest', () => {
-    const ids = FEED_SOURCES.map((source) => source.id);
-    for (const id of [
-      'sidebar',
-      'simon-willison',
-      'smashing-magazine',
-      'product-hunt',
-      'github-blog',
-    ]) {
-      expect(ids).toContain(id);
-    }
-    expect(FEED_SOURCES.reduce((sum, source) => sum + source.maxItems, 0)).toBeLessThanOrEqual(100);
-    expect(ids).not.toContain('kitguru');
-    expect(ids).not.toContain('wccftech');
-  });
-
-  it('does not carry the retired Poche source', () => {
-    // Independent discovery uses Poche as a taste reference, not an upstream.
-    // D1-enabled sources that are absent from this registry remain inert.
-    expect(FEED_SOURCES.map((source) => source.id)).not.toContain('poche-explore');
+  it('reads Poche Explore as the only upstream', () => {
+    expect(FEED_SOURCES.map((source) => source.id)).toEqual(['poche-explore']);
   });
 });

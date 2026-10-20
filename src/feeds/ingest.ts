@@ -68,8 +68,7 @@ async function fetchWithRetry(url: string, headers: Record<string, string>): Pro
  *  The order is window-then-cap, and both halves are load-bearing. Several
  *  publishers ship their whole archive (openai.com/news returns 1247 items), so
  *  without the window the first tick stores years of history; without the cap a
- *  single source can still hand the curator a thousand stories it is never going
- *  to get through. Capping before the window would just slice the archive.
+ *  single source can still store a thousand stories in one tick. Capping before the window would just slice the archive.
  *
  *  Undated items are stamped with `fetchedAt` by `parseRss`, so they pass the
  *  window rather than being dropped. */
@@ -234,10 +233,9 @@ interface IngestReport {
   skipped: number;
   /** Newly normalized and stored in this tick. */
   stored: number;
-  /** Fetched items whose *publisher* category is not a registry value. Since
-   *  the curator assigns the stored category from the story text, this is a
-   *  publisher-taxonomy signal, not a hole in the board — the scheduled handler
-   *  logs it at info level for that reason. */
+  /** Fetched items whose *publisher* category is not a registry value. Such a
+   *  story reaches the global board but no hub, so a jump here means Poche
+   *  added a category the registry does not carry yet. */
   uncategorized: number;
   /** Distinct raw publisher categories behind `uncategorized`, so a taxonomy
    *  drift upstream is diagnosable from the log instead of only countable. */
