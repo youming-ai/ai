@@ -386,4 +386,31 @@ const board = document.querySelector<HTMLElement>('[data-board]');
 if (board) initAppend(board);
 initTheme();
 
+// The mobile category fan opens and closes as a native <details>; this only
+// adds the two ways out a menu is expected to have. A tap on the backdrop lands
+// on the <details> element itself (the backdrop is its ::before).
+const fan = document.querySelector<HTMLDetailsElement>('[data-category-fan]');
+if (fan) {
+  document.addEventListener('click', (event) => {
+    if (fan.open && (event.target === fan || !fan.contains(event.target as Node))) fan.open = false;
+  });
+  // Chrome skips styling a closed <details>' content, so the swing-out keyed
+  // on [open] would play only the first time. Clearing it for one frame of
+  // style resolution restarts it on every open.
+  fan.addEventListener('toggle', () => {
+    if (!fan.open) return;
+    for (const item of fan.querySelectorAll<HTMLElement>('.ds-fan-item')) {
+      item.style.animation = 'none';
+      void item.offsetWidth;
+      item.style.animation = '';
+    }
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && fan.open) {
+      fan.open = false;
+      fan.querySelector('summary')?.focus();
+    }
+  });
+}
+
 export {};

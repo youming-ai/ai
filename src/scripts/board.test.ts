@@ -475,6 +475,63 @@ describe('board appends the next page', () => {
   });
 });
 
+describe('mobile category fan', () => {
+  function openFan() {
+    const { container } = render(
+      ExploreView({
+        initialData: feed([card('a', 'story')], null),
+        initialFilters: { categories: [{ value: 'tools', label: 'Tools', count: 1 }] },
+      }),
+    );
+    const fan = container.querySelector<HTMLDetailsElement>('[data-category-fan]')!;
+    return { fan, container };
+  }
+
+  it('closes on a tap outside it, including its own backdrop', async () => {
+    const { fan, container } = openFan();
+    await startBoard();
+    fan.open = true;
+    // The backdrop is the details' ::before, so a tap on it targets <details>.
+    fan.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(fan.open).toBe(false);
+
+    fan.open = true;
+    container.querySelector('h2')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(fan.open).toBe(false);
+
+    // A tap on one of its own items is navigation, not a dismissal.
+    fan.open = true;
+    fan.querySelector('nav a')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(fan.open).toBe(true);
+  });
+
+  it('closes on Escape and returns focus to its button', async () => {
+    const { fan } = openFan();
+    await startBoard();
+    fan.open = true;
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(fan.open).toBe(false);
+    expect(document.activeElement).toBe(fan.querySelector('summary'));
+  });
+
+  it('clears each item animation for a frame on open, so the swing replays', async () => {
+    // Chrome does not restyle a closed <details>' content, so without this the
+    // swing keyed on [open] plays on the first open only.
+    const { fan } = openFan();
+    await startBoard();
+    const item = fan.querySelector<HTMLElement>('.ds-fan-item')!;
+    const seen: string[] = [];
+    vi.spyOn(item, 'offsetWidth', 'get').mockImplementation(() => {
+      seen.push(item.style.animation);
+      return 0;
+    });
+    fan.open = true;
+    fan.dispatchEvent(new Event('toggle'));
+    expect(seen).toEqual(['none']);
+    expect(item.style.animation).toBe('');
+  });
+});
+
 describe('masonry lanes', () => {
   it('keeps painted cards in their column and fills the shortest lane, so pages leave no gap', async () => {
     // Two columns at this width.
@@ -649,7 +706,7 @@ describe('card media', () => {
         initialFilters: { categories: [] },
       }),
     );
-    const image = container.querySelector('img')!;
+    const image = container.querySelector('[data-card-media]') as HTMLImageElement;
     vi.spyOn(image, 'complete', 'get').mockReturnValue(true);
     vi.spyOn(image, 'naturalWidth', 'get').mockReturnValue(0);
     await startBoard();

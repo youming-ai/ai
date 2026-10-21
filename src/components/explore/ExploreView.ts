@@ -23,7 +23,7 @@ const SKELETON_CARD = html`<div class="h-56 animate-pulse rounded-card bg-overla
 
 /** The theme control. The markup ships both icons hidden and no label beyond
  *  "Theme", and `src/scripts/board.ts` reveals the right one after paint: the
- *  rail renders this control twice (desktop column and mobile disclosure), and
+ *  page renders this control twice (desktop rail foot and mobile bar), and
  *  `data-theme` on the root element is the one source of truth for both, which
  *  the inline script in Layout.astro reads as well. Showing an icon from the
  *  server would be a guess until the script runs; hiding them keeps the
@@ -61,23 +61,7 @@ function categoryRail(
   providedTotal: number | null | undefined,
   view: ViewMode,
 ): Html {
-  const hrefFor = (v: string) => `${v ? `/${v}` : '/'}${view === 'list' ? '?view=list' : ''}`;
-  // Unknown counts sum to null, not zero: an outage should leave the label bare
-  // rather than assert the site holds no links. An empty list is the opposite
-  // case — a successful count over an empty corpus — and is known to be zero,
-  // which `every` on an empty array would otherwise report as "all unknown".
-  const known = options.map((option) => option.count);
-  const summed =
-    options.length === 0
-      ? 0
-      : known.every((count) => count === null)
-        ? null
-        : known.reduce<number>((sum, count) => sum + (count ?? 0), 0);
-  const total = providedTotal ?? summed;
-  const groups = CATEGORY_GROUPS.map((group) => ({
-    ...group,
-    options: options.filter((option) => CATEGORIES[option.value]?.group === group.key),
-  })).filter((group) => group.options.length > 0);
+  const { hrefFor, total, groups } = railModel(options, providedTotal, view);
   return html`<div>
     <div>
       <p class="px-2 pb-1 ds-micro uppercase tracking-caption text-chalkdim">Topics</p>
@@ -97,6 +81,74 @@ function categoryRail(
       </div>`,
     )}
   </div>`;
+}
+
+/** What the desktop rail and the mobile fan both show: the links keep the
+ *  current view, the All count, and the registry's groups in display order. */
+function railModel(
+  options: ExploreFilterOption[],
+  providedTotal: number | null | undefined,
+  view: ViewMode,
+) {
+  const hrefFor = (v: string) => `${v ? `/${v}` : '/'}${view === 'list' ? '?view=list' : ''}`;
+  // Unknown counts sum to null, not zero: an outage should leave the label bare
+  // rather than assert the site holds no links. An empty list is the opposite
+  // case — a successful count over an empty corpus — and is known to be zero,
+  // which `every` on an empty array would otherwise report as "all unknown".
+  const known = options.map((option) => option.count);
+  const summed =
+    options.length === 0
+      ? 0
+      : known.every((count) => count === null)
+        ? null
+        : known.reduce<number>((sum, count) => sum + (count ?? 0), 0);
+  const total = providedTotal ?? summed;
+  const groups = CATEGORY_GROUPS.map((group) => ({
+    ...group,
+    options: options.filter((option) => CATEGORIES[option.value]?.group === group.key),
+  })).filter((group) => group.options.length > 0);
+  return { hrefFor, total, groups };
+}
+
+/** The mobile categories: one button in the bottom-left corner that fans the
+ *  hubs out above it like a hand of cards. Item `--i` sits `--i` steps up and is
+ *  turned `--i` steps further around the button, so the column bows to the
+ *  right and every label stays near-horizontal, which a true quarter-circle of
+ *  nine horizontal labels cannot do without overlapping. `<details>` toggles it
+ *  with no script; `board.ts` only closes it on an outside tap or Escape. */
+function categoryFan(
+  options: ExploreFilterOption[],
+  value: string,
+  providedTotal: number | null | undefined,
+  view: ViewMode,
+): Html {
+  const { hrefFor, total, groups } = railModel(options, providedTotal, view);
+  const items = [
+    { label: GLOBAL_FEED_LABEL, count: total, key: '' },
+    ...groups
+      .flatMap((group) => group.options)
+      .map((option) => ({
+        label: CATEGORIES[option.value]?.label ?? option.label,
+        count: option.count,
+        key: option.value,
+      })),
+  ];
+  const current =
+    items.find((item) => item.key === value) ??
+    (Object.hasOwn(CATEGORIES, value)
+      ? { label: CATEGORIES[value]!.label, count: total === null ? null : 0 }
+      : items[0]!);
+  return html`<details data-category-fan="true" class="ds-fan fixed bottom-4 left-4 z-20 lg:hidden">
+    <summary aria-label="Categories: ${current.label}" class="relative z-10 flex min-h-11 list-none items-center gap-2 border border-line/40 bg-panel px-3 shadow-float ds-caption font-bold text-chalk [&::-webkit-details-marker]:hidden">
+      ${current.label}${current.count !== null && html`<span class="tabular-nums opacity-70">${current.count}</span>`}
+    </summary>
+    <nav aria-label="Categories" class="absolute bottom-full">
+      ${items.map((item, index) => {
+        const active = item.key === value;
+        return html`<a href="${hrefFor(item.key)}" style="--i:${index}"${attr('aria-current', active && 'page')} class="ds-fan-item flex min-h-11 items-center gap-2 whitespace-nowrap border border-line/40 px-3 shadow-float ds-caption bg-panel ${active ? 'font-bold text-pitch' : 'text-chalk'}">${item.label}${item.count !== null && html`<span class="tabular-nums opacity-70">${item.count}</span>`}</a>`;
+      })}
+    </nav>
+  </details>`;
 }
 
 /** The board.
@@ -121,7 +173,6 @@ export default function ExploreView({
   initialCategory?: string;
   initialView?: ViewMode;
 }): Html {
-  const scopeLabel = initialCategory ? (CATEGORIES[initialCategory]?.label ?? initialCategory) : '';
   const cursor = initialData.nextCursor ?? '';
   const hasItems = initialData.items.length > 0;
 
@@ -130,6 +181,12 @@ export default function ExploreView({
   // payloads and the registry fallback carry none, so the sum is still the
   // fallback.
   const rail = categoryRail(
+    initialFilters.categories,
+    initialCategory,
+    initialFilters.total,
+    initialView,
+  );
+  const fan = categoryFan(
     initialFilters.categories,
     initialCategory,
     initialFilters.total,
@@ -155,8 +212,7 @@ export default function ExploreView({
           : 'No links match these filters. Clear one to widen the explore feed.'
       }</p>`;
 
-  // Controls stay at the foot of the desktop rail and above the mobile
-  // disclosure, where they remain available without opening the categories.
+  // Controls stay at the foot of the desktop rail and form the mobile top bar.
   //
   // `justify-between` puts the layout toggle at the row's left edge and the
   // theme control at its right, which is the rail's own inner edge in the
@@ -172,9 +228,9 @@ export default function ExploreView({
     ${THEME_TOGGLE}
   </div>`;
 
-  // h-screen, not 100vh minus a bar: there is no bar any more. The rail scrolls
-  // on its own and the controls stay pinned at its foot. <details> is the
-  // native disclosure — no state, no outside-click handler.
+  // Desktop: the rail is h-screen and scrolls on its own, with the controls
+  // pinned at its foot. Mobile: the controls are a sticky top bar, and the
+  // categories are the fan in the bottom-left corner.
   //
   // `#explore-results` is the skip link's target. It has to exist in every
   // state, including the empty and unavailable ones, so it lives on this
@@ -191,17 +247,8 @@ export default function ExploreView({
         <div class="shrink-0 border-t border-line/40 p-2">${controls}</div>
       </aside>
       <div class="min-w-0 flex-1">
-        <div class="sticky top-0 z-20 border-b border-line/40 bg-night lg:hidden">
-          <div class="px-3 py-2">${controls}</div>
-          <details class="group">
-            <summary class="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 ds-caption uppercase tracking-caption text-chalkdim [&::-webkit-details-marker]:hidden">
-              <span>Categories ${initialCategory ? `· ${scopeLabel}` : ''}</span>
-              <svg aria-hidden="true" class="h-4 w-4 shrink-0 group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"></path></svg>
-            </summary>
-            <div class="max-h-[60dvh] overflow-y-auto px-2 pb-2">${rail}</div>
-          </details>
-        </div>
-        <div id="explore-results" tabindex="-1" class="scroll-mt-28 lg:scroll-mt-4">${feed}</div>
+        <div class="sticky top-0 z-20 border-b border-line/40 bg-night px-3 py-2 lg:hidden">${controls}</div>
+        <div id="explore-results" tabindex="-1" class="scroll-mt-14 lg:scroll-mt-4">${feed}</div>
         ${
           hasItems &&
           html`<div data-board-sentinel="true" data-cursor="${cursor}" class="flex flex-col items-center gap-2 px-3 py-6" aria-live="polite">
@@ -219,5 +266,6 @@ export default function ExploreView({
         }
       </div>
     </div>
+    ${fan}
   </div>`;
 }

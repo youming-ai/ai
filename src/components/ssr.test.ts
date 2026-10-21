@@ -279,25 +279,61 @@ it.each([
   expect(html).not.toContain('data-original-src');
 });
 
-it('keeps mobile controls outside the disclosure and desktop controls below the rail', () => {
+it('keeps the layout and theme on top and fans the categories from the corner', () => {
   const html = ExploreView({
     initialData: { items: [], nextCursor: null },
-    initialFilters: { categories: [] },
+    initialFilters: {
+      categories: [
+        { value: 'tools', label: 'Tools', count: 81 },
+        { value: 'design', label: 'Design', count: 49 },
+      ],
+      total: 130,
+    },
+    initialCategory: 'design',
+    initialView: 'list',
   }).value;
 
+  // The controls render twice: the desktop rail's foot and the mobile top bar.
   expect(html.match(/aria-label="Theme"/g)).toHaveLength(2);
   expect(html.match(/>Grid</g)).toHaveLength(2);
   expect(html.match(/>List</g)).toHaveLength(2);
-  // Mobile controls precede the disclosure; desktop controls follow the rail.
-  const railRows = [...html.matchAll(/Topics/g)].map((match) => match.index ?? 0);
-  const themes = [...html.matchAll(/aria-label="Theme"/g)].map((match) => match.index ?? 0);
-  expect(railRows).toHaveLength(2);
-  expect(themes.length).toBe(2);
-  expect(themes[0]).toBeGreaterThan(railRows[0]!);
-  expect(themes[1]).toBeLessThan(html.indexOf('<details'));
-  expect(html).toContain('group-open:rotate-180');
+
+  // The mobile categories are one <details> in the corner; its button names the
+  // current hub, so a closed fan still says where the reader is.
+  const fan = html.slice(html.indexOf('data-category-fan'), html.indexOf('</details>'));
+  expect(fan).toContain('lg:hidden');
+  expect(fan).toMatch(/<summary aria-label="Categories: Design"/);
+  // All links, then every hub, each a step further round the fan, keeping the
+  // list view; the current hub is marked.
+  const items = [...fan.matchAll(/<a href="([^"]*)" style="--i:(\d+)"/g)].map((m) => [m[1], m[2]]);
+  expect(items).toEqual([
+    ['/?view=list', '0'],
+    ['/tools?view=list', '1'],
+    ['/design?view=list', '2'],
+  ]);
+  expect(fan).toMatch(/href="\/design\?view=list" style="--i:2" aria-current="page"/);
+  // 44px targets.
+  expect(fan.match(/ds-fan-item flex min-h-11/g)).toHaveLength(3);
   // The removed bar was the only backdrop-blurred surface in the markup.
   expect(html).not.toContain('backdrop-blur');
+});
+
+it.each([
+  { total: 81, count: '0' },
+  { total: null, count: null },
+])('names an empty hub independently of available category counts ($total)', ({ total, count }) => {
+  const markup = ExploreView({
+    initialData: { items: [], nextCursor: null },
+    initialFilters: {
+      categories: [{ value: 'tools', label: 'Tools', count: total }],
+      total,
+    },
+    initialCategory: 'crypto',
+  }).value;
+  const summary = markup.match(/<summary[^>]*>[\s\S]*?<\/summary>/)?.[0];
+  expect(summary).toContain('aria-label="Categories: Web3"');
+  if (count === null) expect(summary).not.toContain('tabular-nums');
+  else expect(summary).toContain(`>${count}</span>`);
 });
 
 it('loads only the first cards eagerly, at high priority', () => {
