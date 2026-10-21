@@ -4,8 +4,8 @@ import { defineConfig } from 'void/config';
 // from this for the Astro adapter and for `void deploy`, and records resource
 // IDs in `void.lock.json` (committed). This replaced wrangler.toml.
 export default defineConfig({
-  // Nothing is prerendered, so no ISR cache. Answered here because `void deploy`
-  // asks otherwise, and CI cannot answer a prompt.
+  // Nothing is prerendered, so no ISR cache. Answered here so `void deploy`
+  // does not ask on every machine.
   routing: { isr: false },
   cloudflare: {
     // Astro SSR on Workers: a discovery desk with a D1-backed feed and a KV SWR
