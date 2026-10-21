@@ -15,8 +15,7 @@ Selection is upstream: the desk mirrors [Poche Explore](https://poche.app/explor
 a community-curated feed of tools, design, development and AI links. Each item's
 `· Category` footer files it under a hub. There is no model in the pipeline.
 
-Earlier, independently collected stories are archived (migration 0019): off the
-board, kept as dedupe records.
+Stories from earlier, independently collected sources were deleted (migration 0020).
 
 ## Features
 
