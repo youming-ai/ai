@@ -2,7 +2,7 @@
 
 // Manual declarations for the worker tsconfig, which does not include the root
 // env.d.ts (whose Env is what `/src/data/api` exports). They must match the
-// bindings in wrangler.toml.
+// bindings in void.config.ts.
 //
 // `ASSETS` is genuinely needed here, not descriptive: removing it makes
 // `handle(request, env, ctx)` in entrypoint.ts fail to typecheck, because the

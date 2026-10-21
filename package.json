@@ -21,8 +21,8 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro check && tsc -p tsconfig.worker.json && astro build && node scripts/perf-budget.mjs",
-    "deploy": "bunx wrangler d1 migrations apply DB --remote && bunx wrangler deploy",
-    "db:migrate": "bunx wrangler d1 migrations apply DB --remote",
+    "deploy": "void deploy --platform cloudflare",
+    "db:migrate": "void db migrate --remote",
     "typecheck": "astro check && tsc -p tsconfig.worker.json",
     "preview": "astro preview",
     "test": "vitest",
@@ -51,6 +51,7 @@
     "tailwindcss": "latest",
     "typescript": "^6.0.3",
     "vitest": "latest",
+    "void": "latest",
     "wrangler": "latest"
   }
 }

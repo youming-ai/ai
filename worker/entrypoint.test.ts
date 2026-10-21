@@ -13,7 +13,7 @@ vi.mock('@astrojs/cloudflare/handler', () => ({ handle }));
 
 // The sweep is chosen by comparing controller.cron against PRUNE_CRON, and a
 // drift there once ran a second full ingest for weeks with nothing failing
-// loudly. Pinning the two strings in wrangler.toml (retention.cron.test.ts) does
+// loudly. Pinning the two strings in void.config.ts (retention.cron.test.ts) does
 // not cover the comparison itself, so these tests drive it directly.
 const { ingestAllSources, pruneOldRecords } = vi.hoisted(() => ({
   ingestAllSources: vi.fn(),
@@ -22,7 +22,7 @@ const { ingestAllSources, pruneOldRecords } = vi.hoisted(() => ({
 vi.mock('../src/feeds/ingest', () => ({ ingestAllSources }));
 vi.mock('../src/feeds/retention', async (importOriginal) => ({
   // PRUNE_CRON stays real: the comparison under test must use the same constant
-  // the wrangler.toml binding test pins.
+  // the void.config.ts binding test pins.
   ...(await importOriginal<typeof import('../src/feeds/retention')>()),
   pruneOldRecords,
 }));
@@ -162,7 +162,7 @@ describe('entrypoint scheduled', () => {
 
   it('treats an unrecognised schedule as an ingest tick', async () => {
     // Documented behaviour: anything that is not PRUNE_CRON is an ingest. A
-    // third trigger added to wrangler.toml therefore fans out twice, which is
+    // third trigger added to void.config.ts therefore fans out twice, which is
     // the failure retention.cron.test.ts pins the count to prevent.
     await entrypoint.scheduled!(controller('0 4 * * *'), ENV, mockCtx());
     expect(ingestAllSources).toHaveBeenCalledOnce();

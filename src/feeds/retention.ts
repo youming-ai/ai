@@ -2,7 +2,7 @@ import type { Env } from '../data/api';
 
 const DAY_MS = 86_400_000;
 
-/** The cron that runs this sweep, as written in wrangler.toml. Both schedules
+/** The cron that runs this sweep, as written in void.config.ts. Both schedules
  *  arrive at the same scheduled() handler, so this string is the only thing
  *  telling a sweep apart from an ingest tick. retention.cron.test.ts holds the
  *  two copies together. */

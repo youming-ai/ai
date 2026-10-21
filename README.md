@@ -2,7 +2,6 @@
 
 > A discovery desk for useful tools, thoughtful design, software craft and AI. A Cloudflare cron pulls [Poche Explore](https://poche.app/explore)'s RSS into D1, and Astro renders a fast masonry board with category hubs and RSS feeds.
 
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/youming-ai/ai)
 [![Bun](https://img.shields.io/badge/bun-%3E%3D1.4.2-black)](https://bun.sh) [![Astro](https://img.shields.io/badge/Astro-7.x-ff5d01)](https://astro.build) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
 *No ads, no tracking, no reader-side JS framework. The source registry in `src/feeds/sources.ts` and the taxonomy in `src/categories.ts` are yours to replace.*
@@ -33,7 +32,7 @@ Astro 7, server-rendered with no UI framework · Cloudflare Workers (workerd) ·
 ## Prerequisites
 
 - **Bun ≥ 1.4.2** (`packageManager: bun@1.4.2`)
-- Cloudflare account + `bunx wrangler login` for deployment
+- Cloudflare account; [Void](https://void.cloud) deploys (`bunx --bun void deploy` signs you in on first use). Void's CLI needs Node ≥ 24.21 — or run it on Bun with `--bun`
 
 ## Quick start
 
@@ -41,12 +40,11 @@ Astro 7, server-rendered with no UI framework · Cloudflare Workers (workerd) ·
 git clone https://github.com/youming-ai/ai my-desk && cd my-desk
 bun install
 
-# One-time Cloudflare setup. The committed wrangler.toml is this deployment's
-# own config; start yours from the template, whose names match these commands:
-cp wrangler.example.toml wrangler.toml
+# One-time Cloudflare setup. void.config.ts holds this deployment's own
+# config: change `name`, then create your own KV namespace and D1 database
+# and put their IDs in it.
 bunx wrangler kv namespace create CACHE
 bunx wrangler d1 create ai-desk-content
-# → paste the returned ids into wrangler.toml
 
 bun run dev        # http://localhost:4321 (Miniflare KV + D1)
 bun run feeds:probe  # check the registered sources against the real parser
@@ -58,7 +56,7 @@ bun run feeds:probe  # check the registered sources against the real parser
 | `bunx vitest run` | All tests (watch: `bun run test`) |
 | `bun run typecheck` | `astro check` + `tsc -p tsconfig.worker.json` |
 | `bun run lint` / `format` | Biome |
-| `bun run deploy` | **Migrations then deploy** — always use this, not bare `wrangler deploy` |
+| `bun run deploy` | `void deploy`: build, apply pending D1 migrations (after a Time Travel restore point), upload, verify, switch traffic |
 
 ## Configuration
 
@@ -106,9 +104,9 @@ graph TD
 
 ## Deployment
 
-Workers Builds expects **`bun run deploy`** as the build command (not `wrangler deploy` / `versions upload` alone) — otherwise D1 migrations never apply. Preview deploys run `versions upload` and must not touch D1.
+Pushes to `main` deploy through GitHub Actions (`.github/workflows/deploy.yml`): tests, the typecheck-and-budget build, then `void deploy`, using the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets. Void saves a D1 Time Travel restore point before applying migrations and prints the `void db restore` command; `void project rollback` restores an earlier Worker version with its triggers.
 
-Free-tier notes: ingest writes directly to D1; no Durable Objects on purpose — they break `versions upload` previews.
+Free-tier notes: ingest writes directly to D1; no Durable Objects on purpose — Void stages and verifies each upload before switching traffic, which a Durable Object that cannot be staged defeats.
 
 ## Cost (approx, Cloudflare free tier)
 
