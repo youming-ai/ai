@@ -386,15 +386,31 @@ const board = document.querySelector<HTMLElement>('[data-board]');
 if (board) initAppend(board);
 initTheme();
 
-// On a hub page the current chip can sit past the edge of the mobile chip row,
-// so centre it. Only the row scrolls: scrollIntoView would also move the page.
-const chipRow = document.querySelector<HTMLElement>('[data-category-chips]');
-const currentChip = chipRow?.querySelector<HTMLElement>('[aria-current]');
-if (chipRow && currentChip) {
-  // Rects, not offsetLeft: that is measured from the sticky bar, logo included.
-  const chip = currentChip.getBoundingClientRect();
-  const row = chipRow.getBoundingClientRect();
-  chipRow.scrollLeft += chip.left - row.left - (row.width - chip.width) / 2;
+// The mobile category fan opens and closes as a native <details>; this only
+// adds the two ways out a menu is expected to have. A tap on the backdrop lands
+// on the <details> element itself (the backdrop is its ::before).
+const fan = document.querySelector<HTMLDetailsElement>('[data-category-fan]');
+if (fan) {
+  document.addEventListener('click', (event) => {
+    if (fan.open && (event.target === fan || !fan.contains(event.target as Node))) fan.open = false;
+  });
+  // Chrome skips styling a closed <details>' content, so the swing-out keyed
+  // on [open] would play only the first time. Clearing it for one frame of
+  // style resolution restarts it on every open.
+  fan.addEventListener('toggle', () => {
+    if (!fan.open) return;
+    for (const item of fan.querySelectorAll<HTMLElement>('.ds-fan-item')) {
+      item.style.animation = 'none';
+      void item.offsetWidth;
+      item.style.animation = '';
+    }
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && fan.open) {
+      fan.open = false;
+      fan.querySelector('summary')?.focus();
+    }
+  });
 }
 
 export {};

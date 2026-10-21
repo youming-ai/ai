@@ -47,7 +47,9 @@ const BUDGETS = [
   {
     key: 'client CSS',
     match: (rel) => rel.endsWith('.css'),
-    limit: 6_000,
+    // 6_000 until the mobile category fan: main measured 5,886, and the fan's
+    // four rules plus the floating button's utilities land at ~6,010.
+    limit: 6_100,
     why: 'The stylesheet is render-blocking, so it is on the critical path.',
   },
   {
