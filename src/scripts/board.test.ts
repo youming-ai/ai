@@ -475,58 +475,58 @@ describe('board appends the next page', () => {
   });
 });
 
-describe('mobile category fan', () => {
-  function openFan() {
+describe('mobile category sheet', () => {
+  function mountSheet() {
     const { container } = render(
       ExploreView({
         initialData: feed([card('a', 'story')], null),
         initialFilters: { categories: [{ value: 'tools', label: 'Tools', count: 1 }] },
       }),
     );
-    const fan = container.querySelector<HTMLDetailsElement>('[data-category-fan]')!;
-    return { fan, container };
+    const sheet = container.querySelector<HTMLDetailsElement>('[data-category-sheet]')!;
+    return { sheet, container };
   }
 
   it('closes on a tap outside it, including its own backdrop', async () => {
-    const { fan, container } = openFan();
+    const { sheet, container } = mountSheet();
     await startBoard();
-    fan.open = true;
+    sheet.open = true;
     // The backdrop is the details' ::before, so a tap on it targets <details>.
-    fan.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(fan.open).toBe(false);
+    sheet.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(sheet.open).toBe(false);
 
-    fan.open = true;
+    sheet.open = true;
     container.querySelector('h2')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(fan.open).toBe(false);
+    expect(sheet.open).toBe(false);
 
     // A tap on one of its own items is navigation, not a dismissal.
-    fan.open = true;
-    fan.querySelector('nav a')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(fan.open).toBe(true);
+    sheet.open = true;
+    sheet.querySelector('nav a')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(sheet.open).toBe(true);
   });
 
   it('closes on Escape and returns focus to its button', async () => {
-    const { fan } = openFan();
+    const { sheet } = mountSheet();
     await startBoard();
-    fan.open = true;
+    sheet.open = true;
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    expect(fan.open).toBe(false);
-    expect(document.activeElement).toBe(fan.querySelector('summary'));
+    expect(sheet.open).toBe(false);
+    expect(document.activeElement).toBe(sheet.querySelector('summary'));
   });
 
-  it('clears each item animation for a frame on open, so the swing replays', async () => {
+  it('clears the panel and tile animations for a frame on open, so they replay', async () => {
     // Chrome does not restyle a closed <details>' content, so without this the
-    // swing keyed on [open] plays on the first open only.
-    const { fan } = openFan();
+    // motion keyed on [open] plays on the first open only.
+    const { sheet } = mountSheet();
     await startBoard();
-    const item = fan.querySelector<HTMLElement>('.ds-fan-item')!;
+    const item = sheet.querySelector<HTMLElement>('.ds-sheet-tile')!;
     const seen: string[] = [];
     vi.spyOn(item, 'offsetWidth', 'get').mockImplementation(() => {
       seen.push(item.style.animation);
       return 0;
     });
-    fan.open = true;
-    fan.dispatchEvent(new Event('toggle'));
+    sheet.open = true;
+    sheet.dispatchEvent(new Event('toggle'));
     expect(seen).toEqual(['none']);
     expect(item.style.animation).toBe('');
   });

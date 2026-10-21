@@ -200,61 +200,47 @@
     @apply font-body text-body leading-body;
   }
 
-  /* Mobile category fan (ExploreView's categoryFan): a folding fan opening
-     from the button at the bottom centre. Each hub is one segment — a wedge
-     clipped to a point at the button's top centre and turned to --a — so the
-     segments tile the half-disc without overlapping and every label keeps its
-     whole wedge. Left-hand segments hang from their right end so their labels
-     read toward the button and are never upside down. They swing out from
-     upright by an animation keyed on [open] (a closed <details> hides its
-     content with content-visibility, so a transition never sees a
-     before-state; board.ts restarts the animation on each open). The backdrop
-     is the open details' own ::before: a tap on it lands on <details>, and
-     board.ts closes it. No transform on .ds-fan itself — that would make it the
-     containing block for the fixed backdrop. */
-  .ds-fan {
+  /* Mobile category sheet (ExploreView's categorySheet). The panel springs up
+     from the bottom and the tiles cascade in, by animations keyed on [open]: a
+     closed <details> hides its content with content-visibility, so a
+     transition never sees a before-state, and board.ts restarts them on each
+     open. Each tile's ::after is its share of all links. The backdrop is the
+     open details' own ::before: a tap on it lands on <details>, and board.ts
+     closes it. No transform on .ds-sheet itself — that would make it the
+     containing block for the fixed panel and backdrop. */
+  .ds-sheet {
     inset-inline: 0;
     margin-inline: auto;
     width: max-content;
   }
-  .ds-fan[open]::before {
+  .ds-sheet[open]::before {
     content: '';
     position: fixed;
     inset: 0;
     background: rgb(var(--c-bg) / 0.7);
   }
-  .ds-fan nav {
+  .ds-sheet-tile::after {
+    content: '';
     position: absolute;
-    bottom: 100%;
-    left: 50%;
-  }
-  .ds-fan-item {
-    position: absolute;
-    bottom: -1.375rem;
-    width: min(13rem, 46vw);
-    height: 2.75rem;
-    transform: rotate(var(--a));
-  }
-  .ds-fan-item[data-side='r'] {
-    --upright: -90deg;
     left: 0;
-    transform-origin: 0 50%;
-    justify-content: flex-end;
-    clip-path: polygon(0 50%, 100% 0, 100% 100%);
-  }
-  .ds-fan-item[data-side='l'] {
-    --upright: 90deg;
-    right: 0;
-    transform-origin: 100% 50%;
-    clip-path: polygon(100% 50%, 0 0, 0 100%);
+    bottom: 0;
+    height: 3px;
+    width: var(--w);
+    background: rgb(var(--c-pitch));
   }
   @media (prefers-reduced-motion: no-preference) {
-    .ds-fan[open] .ds-fan-item {
-      animation: ds-fan 320ms var(--ease-out) calc(var(--i) * 20ms) backwards;
+    .ds-sheet[open] .ds-sheet-panel {
+      animation: ds-rise 360ms var(--ease-out);
+    }
+    .ds-sheet[open] .ds-sheet-tile {
+      animation: ds-rise-in 300ms var(--ease-out) calc(80ms + var(--i) * 25ms) backwards;
     }
   }
-  @keyframes ds-fan {
-    from { transform: rotate(var(--upright)); }
+  @keyframes ds-rise {
+    from { transform: translateY(100%); }
+  }
+  @keyframes ds-rise-in {
+    from { opacity: 0; transform: translateY(0.75rem); }
   }
 
   /* Story card. */
