@@ -386,4 +386,15 @@ const board = document.querySelector<HTMLElement>('[data-board]');
 if (board) initAppend(board);
 initTheme();
 
+// On a hub page the current chip can sit past the edge of the mobile chip row,
+// so centre it. Only the row scrolls: scrollIntoView would also move the page.
+const chipRow = document.querySelector<HTMLElement>('[data-category-chips]');
+const currentChip = chipRow?.querySelector<HTMLElement>('[aria-current]');
+if (chipRow && currentChip) {
+  // Rects, not offsetLeft: that is measured from the sticky bar, logo included.
+  const chip = currentChip.getBoundingClientRect();
+  const row = chipRow.getBoundingClientRect();
+  chipRow.scrollLeft += chip.left - row.left - (row.width - chip.width) / 2;
+}
+
 export {};

@@ -1,5 +1,5 @@
 import { CATEGORIES, CATEGORY_GROUPS } from '../../categories';
-import { GLOBAL_FEED_LABEL } from '../../site';
+import { GLOBAL_FEED_LABEL, SITE_NAME } from '../../site';
 import type { ExploreFeed, ExploreFilterOption, ExploreFilterSet } from '../../types';
 import { attr, type Html, html } from '../html';
 import ExploreCard from './ExploreCard';
@@ -23,13 +23,15 @@ const SKELETON_CARD = html`<div class="h-56 animate-pulse rounded-card bg-overla
 
 /** The theme control. The markup ships both icons hidden and no label beyond
  *  "Theme", and `src/scripts/board.ts` reveals the right one after paint: the
- *  rail renders this control twice (desktop column and mobile disclosure), and
+ *  page renders this control twice (desktop rail foot and mobile bar), and
  *  `data-theme` on the root element is the one source of truth for both, which
  *  the inline script in Layout.astro reads as well. Showing an icon from the
  *  server would be a guess until the script runs; hiding them keeps the
  *  button's box (min-w/min-h) stable meanwhile. Inline moon/sun (lucide paths):
  *  two icons don't justify a dependency. */
-const THEME_TOGGLE = html`<button type="button" data-theme-toggle="true" aria-label="Theme" title="Theme" class="flex min-h-9 min-w-9 items-center justify-center rounded-pill text-chalkdim transition-colors hover:bg-overlay/10 hover:text-chalk ds-press">
+const themeToggle = (
+  size: string,
+) => html`<button type="button" data-theme-toggle="true" aria-label="Theme" title="Theme" class="flex ${size} items-center justify-center rounded-pill text-chalkdim transition-colors hover:bg-overlay/10 hover:text-chalk ds-press">
   <svg data-theme-icon="dark" style="display:none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4" aria-hidden="true">
     <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
   </svg>
@@ -38,6 +40,9 @@ const THEME_TOGGLE = html`<button type="button" data-theme-toggle="true" aria-la
     <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
   </svg>
 </button>`;
+
+const LIST_ICON = html`<svg aria-hidden="true" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>`;
+const GRID_ICON = html`<svg aria-hidden="true" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="7" height="7"></rect><rect x="13" y="4" width="7" height="7"></rect><rect x="4" y="13" width="7" height="7"></rect><rect x="13" y="13" width="7" height="7"></rect></svg>`;
 
 /** One category link in the rail. */
 function filterRow(label: string, count: number | null, active: boolean, href: string): Html {
@@ -61,23 +66,7 @@ function categoryRail(
   providedTotal: number | null | undefined,
   view: ViewMode,
 ): Html {
-  const hrefFor = (v: string) => `${v ? `/${v}` : '/'}${view === 'list' ? '?view=list' : ''}`;
-  // Unknown counts sum to null, not zero: an outage should leave the label bare
-  // rather than assert the site holds no links. An empty list is the opposite
-  // case — a successful count over an empty corpus — and is known to be zero,
-  // which `every` on an empty array would otherwise report as "all unknown".
-  const known = options.map((option) => option.count);
-  const summed =
-    options.length === 0
-      ? 0
-      : known.every((count) => count === null)
-        ? null
-        : known.reduce<number>((sum, count) => sum + (count ?? 0), 0);
-  const total = providedTotal ?? summed;
-  const groups = CATEGORY_GROUPS.map((group) => ({
-    ...group,
-    options: options.filter((option) => CATEGORIES[option.value]?.group === group.key),
-  })).filter((group) => group.options.length > 0);
+  const { hrefFor, total, groups } = railModel(options, providedTotal, view);
   return html`<div>
     <div>
       <p class="px-2 pb-1 ds-micro uppercase tracking-caption text-chalkdim">Topics</p>
@@ -97,6 +86,60 @@ function categoryRail(
       </div>`,
     )}
   </div>`;
+}
+
+/** What the desktop rail and the mobile chips both show: the links keep the
+ *  current view, the All count, and the registry's groups in display order. */
+function railModel(
+  options: ExploreFilterOption[],
+  providedTotal: number | null | undefined,
+  view: ViewMode,
+) {
+  const hrefFor = (v: string) => `${v ? `/${v}` : '/'}${view === 'list' ? '?view=list' : ''}`;
+  // Unknown counts sum to null, not zero: an outage should leave the label bare
+  // rather than assert the site holds no links. An empty list is the opposite
+  // case — a successful count over an empty corpus — and is known to be zero,
+  // which `every` on an empty array would otherwise report as "all unknown".
+  const known = options.map((option) => option.count);
+  const summed =
+    options.length === 0
+      ? 0
+      : known.every((count) => count === null)
+        ? null
+        : known.reduce<number>((sum, count) => sum + (count ?? 0), 0);
+  const total = providedTotal ?? summed;
+  const groups = CATEGORY_GROUPS.map((group) => ({
+    ...group,
+    options: options.filter((option) => CATEGORIES[option.value]?.group === group.key),
+  })).filter((group) => group.options.length > 0);
+  return { hrefFor, total, groups };
+}
+
+/** The mobile bar's categories: one row of chips that scrolls sideways, in the
+ *  rail's order, so switching is one tap and the current one is always in view
+ *  (`board.ts` scrolls it there). */
+function categoryChips(
+  options: ExploreFilterOption[],
+  value: string,
+  providedTotal: number | null | undefined,
+  view: ViewMode,
+): Html {
+  const { hrefFor, total, groups } = railModel(options, providedTotal, view);
+  const chip = (label: string, count: number | null, active: boolean, href: string) =>
+    html`<a href="${href}"${attr('aria-current', active && 'page')} class="flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap px-3 ds-caption ${active ? 'bg-pitch/15 font-bold text-pitch' : 'text-chalkdim'}">${label}${count !== null && html`<span class="tabular-nums opacity-70">${count}</span>`}</a>`;
+  return html`<nav data-category-chips="true" aria-label="Categories" class="no-scrollbar flex min-w-0 flex-1 overflow-x-auto">
+    ${chip(GLOBAL_FEED_LABEL, total, !value, hrefFor(''))}
+    ${groups
+      .flatMap((group) => group.options)
+      .map((option) =>
+        chip(
+          CATEGORIES[option.value]?.label ?? option.label,
+          option.count,
+          value === option.value,
+          hrefFor(option.value),
+        ),
+      )}
+  </nav>`;
 }
 
 /** The board.
@@ -121,7 +164,6 @@ export default function ExploreView({
   initialCategory?: string;
   initialView?: ViewMode;
 }): Html {
-  const scopeLabel = initialCategory ? (CATEGORIES[initialCategory]?.label ?? initialCategory) : '';
   const cursor = initialData.nextCursor ?? '';
   const hasItems = initialData.items.length > 0;
 
@@ -135,6 +177,14 @@ export default function ExploreView({
     initialFilters.total,
     initialView,
   );
+  const chips = categoryChips(
+    initialFilters.categories,
+    initialCategory,
+    initialFilters.total,
+    initialView,
+  );
+  // On mobile the layout control is one icon that switches to the other view.
+  const otherView: ViewMode = initialView === 'list' ? 'grid' : 'list';
 
   const cards =
     initialView === 'list'
@@ -169,12 +219,12 @@ export default function ExploreView({
           html`<a href="?view=${view}"${attr('aria-current', initialView === view && 'true')} class="ds-seg-tab min-h-9 px-2.5 text-xs ${initialView === view ? 'ds-seg-tab-active' : 'ds-seg-tab-inactive'}">${view === 'grid' ? 'Grid' : 'List'}</a>`,
       )}
     </nav>
-    ${THEME_TOGGLE}
+    ${themeToggle('min-h-9 min-w-9')}
   </div>`;
 
-  // h-screen, not 100vh minus a bar: there is no bar any more. The rail scrolls
-  // on its own and the controls stay pinned at its foot. <details> is the
-  // native disclosure — no state, no outside-click handler.
+  // Desktop: the rail is h-screen and scrolls on its own, with the controls
+  // pinned at its foot. Mobile: one sticky row instead — the site mark and name,
+  // the category chips (which scroll sideways), the layout icon and the theme.
   //
   // `#explore-results` is the skip link's target. It has to exist in every
   // state, including the empty and unavailable ones, so it lives on this
@@ -191,17 +241,13 @@ export default function ExploreView({
         <div class="shrink-0 border-t border-line/40 p-2">${controls}</div>
       </aside>
       <div class="min-w-0 flex-1">
-        <div class="sticky top-0 z-20 border-b border-line/40 bg-night lg:hidden">
-          <div class="px-3 py-2">${controls}</div>
-          <details class="group">
-            <summary class="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 ds-caption uppercase tracking-caption text-chalkdim [&::-webkit-details-marker]:hidden">
-              <span>Categories ${initialCategory ? `· ${scopeLabel}` : ''}</span>
-              <svg aria-hidden="true" class="h-4 w-4 shrink-0 group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"></path></svg>
-            </summary>
-            <div class="max-h-[60dvh] overflow-y-auto px-2 pb-2">${rail}</div>
-          </details>
+        <div class="sticky top-0 z-20 flex items-center border-b border-line/40 bg-night lg:hidden">
+          <a href="${initialView === 'list' ? '/?view=list' : '/'}" aria-label="${SITE_NAME} home" class="flex h-11 shrink-0 items-center gap-1.5 pl-3 pr-2 font-display text-sm font-bold text-chalk"><img src="/favicon.svg" alt="" width="20" height="20" class="h-5 w-5"/><span aria-hidden="true">${SITE_NAME}</span></a>
+          ${chips}
+          <a href="?view=${otherView}" aria-label="${otherView === 'list' ? 'List' : 'Grid'} view" title="${otherView === 'list' ? 'List' : 'Grid'} view" class="flex h-11 w-11 shrink-0 items-center justify-center text-chalkdim hover:text-chalk">${otherView === 'list' ? LIST_ICON : GRID_ICON}</a>
+          ${themeToggle('h-11 w-11 shrink-0')}
         </div>
-        <div id="explore-results" tabindex="-1" class="scroll-mt-28 lg:scroll-mt-4">${feed}</div>
+        <div id="explore-results" tabindex="-1" class="scroll-mt-14 lg:scroll-mt-4">${feed}</div>
         ${
           hasItems &&
           html`<div data-board-sentinel="true" data-cursor="${cursor}" class="flex flex-col items-center gap-2 px-3 py-6" aria-live="polite">

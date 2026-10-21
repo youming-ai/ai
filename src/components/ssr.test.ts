@@ -74,7 +74,9 @@ it('renders a feed-supplied video as a <video> element, never as an <img>', () =
   }).value;
   expect(html).toContain('<video');
   expect(html).toContain('hero_1080p_video.mp4');
-  expect(html).not.toContain('<img');
+  // Scoped to the card: the mobile bar's logo is the page's one other <img>.
+  const card = html.slice(html.indexOf('<article'), html.indexOf('</article>'));
+  expect(card).not.toContain('<img');
   // A rendered `autoplay` would start before `board.ts` has checked reduced
   // motion — cached media or slow JS would expose reduced-motion readers to the
   // loop the script is supposed to suppress. Playback begins from the script.
@@ -279,23 +281,43 @@ it.each([
   expect(html).not.toContain('data-original-src');
 });
 
-it('keeps mobile controls outside the disclosure and desktop controls below the rail', () => {
+it('puts the mobile categories, layout and theme in one sticky row of 44px targets', () => {
   const html = ExploreView({
     initialData: { items: [], nextCursor: null },
-    initialFilters: { categories: [] },
+    initialFilters: {
+      categories: [
+        { value: 'tools', label: 'Tools', count: 81 },
+        { value: 'design', label: 'Design', count: 49 },
+      ],
+      total: 130,
+    },
+    initialCategory: 'design',
+    initialView: 'list',
   }).value;
 
+  // One theme control in the desktop rail's foot, one in the mobile bar.
   expect(html.match(/aria-label="Theme"/g)).toHaveLength(2);
-  expect(html.match(/>Grid</g)).toHaveLength(2);
-  expect(html.match(/>List</g)).toHaveLength(2);
-  // Mobile controls precede the disclosure; desktop controls follow the rail.
-  const railRows = [...html.matchAll(/Topics/g)].map((match) => match.index ?? 0);
-  const themes = [...html.matchAll(/aria-label="Theme"/g)].map((match) => match.index ?? 0);
-  expect(railRows).toHaveLength(2);
-  expect(themes.length).toBe(2);
-  expect(themes[0]).toBeGreaterThan(railRows[0]!);
-  expect(themes[1]).toBeLessThan(html.indexOf('<details'));
-  expect(html).toContain('group-open:rotate-180');
+  // The disclosure is gone: categories are chips the reader can see and tap.
+  expect(html).not.toContain('<details');
+  const chips = html.slice(
+    html.indexOf('data-category-chips'),
+    html.indexOf('</nav>', html.indexOf('data-category-chips')),
+  );
+  expect(chips.match(/<a /g)).toHaveLength(3);
+  // The current hub is marked, and every chip keeps the list view.
+  expect(chips).toMatch(/href="\/design\?view=list" aria-current="page"/);
+  expect(chips).toContain('href="/?view=list"');
+  // The site is named on mobile, not only to screen readers: the rail that
+  // shows identity on desktop is hidden there.
+  expect(html).toMatch(
+    /aria-label="AI Desk home"[^>]*><img[^>]*\/><span aria-hidden="true">AI Desk<\/span><\/a>/,
+  );
+  // Mobile has one layout icon that switches to the other view.
+  expect(html).toContain('aria-label="Grid view"');
+  // 44px: chips, the layout icon and the mobile theme toggle.
+  expect(chips).toContain('min-h-11');
+  expect(html).toMatch(/aria-label="Grid view"[^>]*class="flex h-11 w-11/);
+  expect(html).toMatch(/aria-label="Theme" title="Theme" class="flex h-11 w-11/);
   // The removed bar was the only backdrop-blurred surface in the markup.
   expect(html).not.toContain('backdrop-blur');
 });

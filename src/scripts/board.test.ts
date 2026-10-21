@@ -649,7 +649,7 @@ describe('card media', () => {
         initialFilters: { categories: [] },
       }),
     );
-    const image = container.querySelector('img')!;
+    const image = container.querySelector('[data-card-media]') as HTMLImageElement;
     vi.spyOn(image, 'complete', 'get').mockReturnValue(true);
     vi.spyOn(image, 'naturalWidth', 'get').mockReturnValue(0);
     await startBoard();
