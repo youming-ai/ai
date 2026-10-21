@@ -133,7 +133,11 @@ function categoryFan(
         key: option.value,
       })),
   ];
-  const current = items.find((item) => item.key === value) ?? items[0]!;
+  const current =
+    items.find((item) => item.key === value) ??
+    (Object.hasOwn(CATEGORIES, value)
+      ? { label: CATEGORIES[value]!.label, count: total === null ? null : 0 }
+      : items[0]!);
   return html`<details data-category-fan="true" class="ds-fan fixed bottom-4 left-4 z-20 lg:hidden">
     <summary aria-label="Categories: ${current.label}" class="relative z-10 flex min-h-11 list-none items-center gap-2 border border-line/40 bg-panel px-3 shadow-float ds-caption font-bold text-chalk [&::-webkit-details-marker]:hidden">
       ${current.label}${current.count !== null && html`<span class="tabular-nums opacity-70">${current.count}</span>`}

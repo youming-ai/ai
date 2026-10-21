@@ -318,6 +318,24 @@ it('keeps the layout and theme on top and fans the categories from the corner', 
   expect(html).not.toContain('backdrop-blur');
 });
 
+it.each([
+  { total: 81, count: '0' },
+  { total: null, count: null },
+])('names an empty hub independently of available category counts ($total)', ({ total, count }) => {
+  const markup = ExploreView({
+    initialData: { items: [], nextCursor: null },
+    initialFilters: {
+      categories: [{ value: 'tools', label: 'Tools', count: total }],
+      total,
+    },
+    initialCategory: 'crypto',
+  }).value;
+  const summary = markup.match(/<summary[^>]*>[\s\S]*?<\/summary>/)?.[0];
+  expect(summary).toContain('aria-label="Categories: Web3"');
+  if (count === null) expect(summary).not.toContain('tabular-nums');
+  else expect(summary).toContain(`>${count}</span>`);
+});
+
 it('loads only the first cards eagerly, at high priority', () => {
   // The board is a wall of images on a bandwidth-limited link. Measured at
   // Slow-4G, the LCP element was a card image that was still `loading="lazy"`

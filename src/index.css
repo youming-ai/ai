@@ -234,6 +234,23 @@
   @keyframes ds-fan {
     from { transform: scale(0); }
   }
+  /* A short viewport cannot fit the fan. Keep All nearest the button and
+     allow the remaining hubs to scroll into view without shrinking targets. */
+  @media (max-height: 32rem) {
+    .ds-fan nav {
+      display: flex;
+      flex-direction: column-reverse;
+      max-height: calc(100dvh - 5rem);
+      overflow-y: auto;
+      width: max-content;
+    }
+    .ds-fan[open] .ds-fan-item {
+      position: static;
+      flex-shrink: 0;
+      transform: none;
+      animation: none;
+    }
+  }
 
   /* Story card. */
   .ds-card {
