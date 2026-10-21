@@ -18,6 +18,14 @@ export default defineConfig({
     // cron schedules (told apart by controller.cron).
     main: './worker/entrypoint.ts',
 
+    // Where the Worker is reachable, as it was configured in the dashboard
+    // before Void deployed it. Void republishes these on every deploy and
+    // refuses to deploy over dashboard-managed values it cannot see, so they
+    // must stay explicit here.
+    routes: [{ pattern: 'ai.um1ng.me', custom_domain: true }],
+    workers_dev: true,
+    preview_urls: true,
+
     observability: {
       enabled: true,
       head_sampling_rate: 1,
