@@ -47,16 +47,14 @@ const BUDGETS = [
   {
     key: 'client CSS',
     match: (rel) => rel.endsWith('.css'),
-    // 6_000 until the mobile category fan: main measured 5,886, and the fan's
-    // four rules plus the floating button's utilities land at ~6,010.
-    limit: 6_100,
+    limit: 6_000,
     why: 'The stylesheet is render-blocking, so it is on the critical path.',
   },
   {
     key: 'font payload',
     match: (rel) => rel.endsWith('.woff2'),
-    limit: 120_000,
-    why: 'Three latin-subset variable faces. Adding a family or a non-variable weight shows up here.',
+    limit: 90_000,
+    why: 'Two latin-subset variable faces (Archivo, Inter); labels use the system monospace. A third family or a non-variable weight shows up here.',
   },
 ];
 

@@ -71,11 +71,11 @@ const canonicalUrl = `${SITE_ORIGIN}${canonicalPath}`;
     <meta name="twitter:image" content={socialImage} />
     {socialImageAlt && <meta name="twitter:image:alt" content={socialImageAlt} />}
     <!-- Fonts are self-hosted now (see the @font-face block in index.css):
-         three latin-subset variable files served from this origin, so there is
+         two latin-subset variable files served from this origin, so there is
          no third-party stylesheet on the critical path and no preconnect to a
          host the reader would otherwise never contact. Archivo carries the desk
-         headlines, Inter keeps prose readable, JetBrains Mono labels live state
-         and source metadata.
+         headlines and Inter keeps prose readable; labels and source metadata
+         use the platform's own monospace.
          Deliberately NOT preloaded: measuring with and without showed the
          preloads put ~83KB on the critical path and cost ~180ms of FCP, while
          `font-display: swap` already paints text immediately in the fallback. -->
