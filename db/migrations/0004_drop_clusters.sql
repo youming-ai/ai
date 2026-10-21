@@ -1,3 +1,5 @@
+-- void:allow-destructive
+-- Destructive by design; applied in production before Void deployed this Worker.
 -- article_clusters was created in 0001 for cross-source near-duplicate
 -- grouping and never written to — zero code references, zero rows. Dedupe is
 -- handled earlier and more cheaply: ingestAllSources drops articles whose

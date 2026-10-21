@@ -1,3 +1,5 @@
+-- void:allow-destructive
+-- Destructive by design; applied in production before Void deployed this Worker.
 -- Poche Explore is the only source, and the registry never fetches any other
 -- again, so the old corpus no longer guards dedupe for anything: delete it
 -- instead of archiving it. Poche rows (including archived ones) stay, because

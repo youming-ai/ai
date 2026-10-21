@@ -1,3 +1,5 @@
+-- void:allow-destructive
+-- Destructive by design; applied in production before Void deployed this Worker.
 -- Hardware pivot: the desk moves from football to PC hardware & peripherals.
 -- The stored semantics change, so the columns follow: comp → category,
 -- is_football → is_on_topic, and the single-value sport column goes away.
