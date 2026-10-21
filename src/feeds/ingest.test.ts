@@ -46,16 +46,13 @@ function item(title: string, link: string, description = 'x'): string {
  *  every article INSERT so a test can assert on what reached the database
  *  rather than on what the report claims. */
 function ingestDb(
-  { changes = 1, enabled = [TEST_SOURCE.id] }: { changes?: number; enabled?: string[] } = {},
+  { changes = 1 }: { changes?: number } = {},
   stored: { fingerprints?: string[]; urls?: string[] } = {},
 ) {
   const inserted: unknown[][] = [];
   const db = {
     batch: vi.fn(async () => []),
     prepare: vi.fn((sql: string) => {
-      if (sql.includes('SELECT id FROM sources')) {
-        return { all: async () => ({ results: enabled.map((id) => ({ id })) }) };
-      }
       if (sql.includes('FROM articles') && sql.includes(' IN (')) {
         return {
           bind: vi.fn((...params: string[]) => ({
@@ -382,26 +379,6 @@ describe('the report does not overstate what it stored', () => {
     expect(inserted).toHaveLength(1);
     expect(report.stored).toBe(0);
     expect(report.skipped).toBe(1);
-  });
-});
-
-describe('sources that are disabled', () => {
-  it('leaves retired sources inert even if their D1 enabled flag is still set', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    const report = await ingestAllSources(envWith(ingestDb({ enabled: ['toms-hardware'] }).db));
-    expect(report.sources).toBe(0);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('fetches nothing when no source is enabled, without calling upstream', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-
-    const report = await ingestAllSources(envWith(ingestDb({ enabled: [] }).db));
-
-    expect(report.sources).toBe(0);
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

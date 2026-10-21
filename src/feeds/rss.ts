@@ -91,7 +91,6 @@ export function parseRss(
       articles.push({
         sourceId: source.id,
         sourceName: source.name,
-        sourceAuthority: source.authorityScore,
         category,
         title,
         description,

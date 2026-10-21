@@ -6,8 +6,6 @@ describe('feed sources', () => {
     expect(new Set(FEED_SOURCES.map((source) => source.id)).size).toBe(FEED_SOURCES.length);
     for (const source of FEED_SOURCES) {
       expect(source.url.startsWith('https://'), source.id).toBe(true);
-      expect(source.authorityScore).toBeGreaterThan(0);
-      expect(source.authorityScore).toBeLessThanOrEqual(100);
     }
   });
 

@@ -1,7 +1,7 @@
 import type { Env } from '../data/api';
 import { CRAWLER_USER_AGENT } from '../site';
 import { sleep } from '../utils/coerce';
-import { canonicalCategory, normalizeTitle, storeArticle } from './enrich';
+import { canonicalCategory, storeArticle } from './enrich';
 import { parseRss } from './rss';
 import { FEED_SOURCES, INGEST_MAX_AGE_MS } from './sources';
 import type { FeedSource, RawArticle } from './types';
@@ -110,43 +110,25 @@ async function normalizeArticles(
   return normalized;
 }
 
+/** `articles.source_id` references `sources(id)`, so a fresh database needs the
+ *  row before the first insert. */
 async function ensureSources(db: D1Database): Promise<void> {
   const now = Date.now();
   await db.batch(
     FEED_SOURCES.map((source) =>
       db
         .prepare(
-          `INSERT INTO sources (id, kind, name, url, authority_score, enabled, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO sources (id, kind, name, url, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              kind = excluded.kind,
              name = excluded.name,
              url = excluded.url,
-             authority_score = excluded.authority_score,
              updated_at = excluded.updated_at`,
         )
-        .bind(
-          source.id,
-          source.kind,
-          source.name,
-          source.url,
-          source.authorityScore,
-          source.defaultEnabled ? 1 : 0,
-          now,
-          now,
-        ),
+        .bind(source.id, source.kind, source.name, source.url, now, now),
     ),
   );
-}
-
-async function enabledSources(db: D1Database): Promise<FeedSource[]> {
-  const result = await db
-    .prepare('SELECT id FROM sources WHERE enabled = 1')
-    .all<{ id: unknown }>();
-  const enabled = new Set(
-    (result.results ?? []).map((row) => (typeof row.id === 'string' ? row.id : '')).filter(Boolean),
-  );
-  return FEED_SOURCES.filter((source) => enabled.has(source.id));
 }
 
 async function knownColumn(
@@ -186,42 +168,6 @@ export async function knownCanonicalUrls(db: D1Database, urls: string[]): Promis
   return knownColumn(db, 'canonical_url', urls);
 }
 
-/** Find candidates whose normalized title already belongs to another source.
- *  A same-source title match is allowed: one curated source can legitimately
- *  contain distinct links titled "Home" or "C++". */
-async function knownCrossSourceTitles(
-  db: D1Database,
-  articles: RawArticle[],
-): Promise<Set<string>> {
-  const titles = [...new Set(articles.map((article) => normalizeTitle(article.title)))];
-  const sourceIdsByTitle = new Map<string, Set<string>>();
-  for (let offset = 0; offset < titles.length; offset += KNOWN_COLUMN_CHUNK) {
-    const chunk = titles.slice(offset, offset + KNOWN_COLUMN_CHUNK);
-    const result = await db
-      .prepare(
-        `SELECT title_norm, source_id FROM articles WHERE title_norm IN (${chunk.map(() => '?').join(',')})`,
-      )
-      .bind(...chunk)
-      .all<{ title_norm: unknown; source_id: unknown }>();
-    for (const row of result.results ?? []) {
-      if (typeof row.title_norm !== 'string' || typeof row.source_id !== 'string') continue;
-      const sourceIds = sourceIdsByTitle.get(row.title_norm) ?? new Set<string>();
-      sourceIds.add(row.source_id);
-      sourceIdsByTitle.set(row.title_norm, sourceIds);
-    }
-  }
-
-  const blocked = new Set<string>();
-  for (const article of articles) {
-    const title = normalizeTitle(article.title);
-    const sourceIds = sourceIdsByTitle.get(title);
-    if (sourceIds && (sourceIds.size > 1 || !sourceIds.has(article.sourceId))) {
-      blocked.add(`${article.sourceId}\u0000${title}`);
-    }
-  }
-  return blocked;
-}
-
 interface IngestReport {
   sources: number;
   fetched: number;
@@ -249,7 +195,7 @@ interface IngestReport {
 export async function ingestAllSources(env: Env, _ctx?: ExecutionContext): Promise<IngestReport> {
   if (!env.DB) throw new Error('D1 binding is required');
   await ensureSources(env.DB);
-  const sources = await enabledSources(env.DB);
+  const sources = FEED_SOURCES;
 
   const results = await Promise.all(
     sources.map(async (source) => {
@@ -279,28 +225,8 @@ export async function ingestAllSources(env: Env, _ctx?: ExecutionContext): Promi
       fetched.map((article) => article.canonicalUrl),
     ),
   ]);
-  let articles = fetched.filter(
+  const articles = fetched.filter(
     (article) => !known.has(article.fingerprint) && !knownUrls.has(article.canonicalUrl),
-  );
-
-  // Cross-source dedup: the same story syndicated across outlets has a
-  // different fingerprint (hostname is part of it), so drop by normalized
-  // title. Keep same-source title collisions because a title alone does not
-  // prove two links are the same story. First cross-source occurrence wins —
-  // FEED_SOURCES order puts high-authority outlets first.
-  const firstSourceByTitle = new Map<string, string>();
-  articles = articles.filter((article) => {
-    const title = normalizeTitle(article.title);
-    const firstSource = firstSourceByTitle.get(title);
-    if (!firstSource) {
-      firstSourceByTitle.set(title, article.sourceId);
-      return true;
-    }
-    return firstSource === article.sourceId;
-  });
-  const storedTitles = await knownCrossSourceTitles(env.DB, articles);
-  articles = articles.filter(
-    (article) => !storedTitles.has(`${article.sourceId}\u0000${normalizeTitle(article.title)}`),
   );
 
   let stored = 0;
