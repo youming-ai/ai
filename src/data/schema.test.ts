@@ -151,8 +151,9 @@ describe('migrations', () => {
     expect(indexes).toContain('idx_articles_published');
     expect(indexes).toContain('idx_articles_category');
     expect(indexes).toContain('idx_articles_source');
-    // The ingest dedupe reads `WHERE title_norm IN (...)` every tick.
-    expect(indexes).toContain('idx_articles_title_norm');
+    // Nothing reads title_norm or the curator's queue any more (0021).
+    expect(indexes).not.toContain('idx_articles_title_norm');
+    expect(indexes).not.toContain('idx_articles_pending_curation');
     // The feed's sort and keyset seek are planned against these.
     expect(indexes).toContain('idx_feed_global');
     expect(indexes).toContain('idx_feed_category');
@@ -200,11 +201,7 @@ describe('the explore queries run against the migrated schema', () => {
       url: 'https://example.com/story',
       category: 'tools',
       isVideo: false,
-      qualityScore: 90,
       publishedAt: PUBLISHED_AT,
-      // Computed at query time from published_at over a 72h window, so a row
-      // this old floors at 0 — which is what proves the expression ran.
-      freshnessScore: 0,
     });
     expect(feed.nextCursor).toBeNull();
   });
@@ -220,8 +217,8 @@ describe('the explore queries run against the migrated schema', () => {
     seed(db, {
       id: 'b'.repeat(64),
       fingerprint: 'b'.repeat(64),
-      canonical_url: 'https://example.com/off-topic',
-      is_on_topic: 0,
+      canonical_url: 'https://example.com/filtered',
+      status: 'filtered',
     });
     const feed = await getExploreFeed({}, envFor(db), ctx);
     expect(feed.items).toHaveLength(0);
@@ -354,14 +351,14 @@ describe('the rail total counts the rows no hub holds', () => {
 });
 
 describe('the feed query is planned against the index', () => {
-  // The shape that was broken: day_bucket was an expression, so neither the
-  // ORDER BY nor the keyset predicate could use an index — every page sorted the
-  // whole live partition in a temp B-tree and page N cost as much as page 1.
+  // The shape that was broken once: when the sort key was an expression,
+  // neither the ORDER BY nor the keyset predicate could use an index — every
+  // page sorted the whole live partition in a temp B-tree.
   //
   // The statement under test is the one queryExplore actually prepared, captured
   // off the D1 shim. A copy written here would keep passing after the source it
   // mirrors changed, which is the failure this whole file exists to avoid.
-  const FEED_CURSOR = '20711:90:1789634400000:x';
+  const FEED_CURSOR = '1789634400000:x';
 
   it('seeks instead of sorting the partition, with and without a category', async () => {
     for (const query of [{}, { category: 'tools' }]) {
@@ -376,7 +373,9 @@ describe('the feed query is planned against the index', () => {
       );
       // Both the first page and the cursor page were exercised.
       expect(feedStatements.length, 'feed statement prepared').toBeGreaterThanOrEqual(2);
-      expect(feedStatements.some((sql) => sql.includes('(?, ?, ?, ?)'))).toBe(true);
+      expect(feedStatements.some((sql) => sql.includes('(a.published_at, a.id) < (?, ?)'))).toBe(
+        true,
+      );
 
       for (const sql of feedStatements) {
         const plan = (db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all() as { detail: string }[])
@@ -400,9 +399,8 @@ describe('keyset pagination over real rows', () => {
         id: `id-${String(i).padStart(3, '0')}`,
         fingerprint: `fp-${String(i).padStart(3, '0')}`,
         canonical_url: `https://example.com/${i}`,
-        // Same published_at and quality for all: only the id breaks the tie.
+        // Same published_at for all: only the id breaks the tie.
         published_at: TIE,
-        quality_score: 90,
       });
     }
   }
@@ -436,21 +434,18 @@ describe('keyset pagination over real rows', () => {
   it('continues correctly across a day boundary', async () => {
     const db = migratedDatabase();
     const env = envFor(db);
-    // Day bucket is floor(published_at / 86400000): put rows either side of one.
     const boundary = Math.floor(TIE / 86_400_000) * 86_400_000;
     seed(db, {
       id: 'before',
       fingerprint: 'fp-before',
       canonical_url: 'https://example.com/before',
       published_at: boundary - 1,
-      quality_score: 90,
     });
     seed(db, {
       id: 'after',
       fingerprint: 'fp-after',
       canonical_url: 'https://example.com/after',
       published_at: boundary,
-      quality_score: 10, // lower quality, later day: the day bucket must win
     });
 
     const first = await getExploreFeed({ limit: 1 }, env, ctx);

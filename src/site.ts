@@ -34,14 +34,3 @@ export const SITE_LANGUAGE = 'en';
  *  Declared here rather than inline in the renderer so the three spellings of
  *  "this site is English" all come from one file. */
 export const SITE_RSS_LANGUAGE = 'en-us';
-
-/** Card-stream teaser policy: blurb first (the curated one-liner), then the
- *  summary, then the publisher's own teaser. The card is the only consumer —
- *  the second mode that existed for the per-link pages went with them. */
-export function articleDeck(article: {
-  summary?: string;
-  blurb?: string;
-  description?: string;
-}): string {
-  return article.blurb || article.summary || article.description || '';
-}

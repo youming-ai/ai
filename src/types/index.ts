@@ -4,8 +4,6 @@ export interface ExploreArticle {
   id: string;
   title: string;
   description: string;
-  summary: string;
-  blurb: string;
   url: string;
   imageUrl: string;
   /** True when `imageUrl` is a playable video rather than an image. Judged on
@@ -18,11 +16,6 @@ export interface ExploreArticle {
   publishedAt: number;
   /** Canonical category key from src/categories.ts, null when unattributed. */
   category: string | null;
-  tags: string[];
-  qualityScore: number;
-  /** 0–100, decaying over a 72h window from `publishedAt`, computed at query
-   *  time. Exported for API consumers; the current UI does not render it. */
-  freshnessScore: number;
 }
 
 export interface ExploreFeed {

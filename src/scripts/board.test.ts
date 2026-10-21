@@ -25,8 +25,6 @@ function card(id: string, title: string, isVideo = false): ExploreArticle {
     id,
     title,
     description: '',
-    summary: '',
-    blurb: '',
     url: `https://example.com/${id}`,
     imageUrl: isVideo ? 'https://cdn.example.com/clip.mp4' : '/og.png',
     isVideo,
@@ -35,9 +33,6 @@ function card(id: string, title: string, isVideo = false): ExploreArticle {
     sourceDomain: 'example.com',
     publishedAt: 1786080856000,
     category: 'tools',
-    tags: ['tools'],
-    qualityScore: 82,
-    freshnessScore: 60,
   };
 }
 

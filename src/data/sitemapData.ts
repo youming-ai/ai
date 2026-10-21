@@ -31,7 +31,7 @@ export async function getSitemapNews(env: Env, ctx: ExecutionContext): Promise<S
         const hubs = await env.DB.prepare(
           `SELECT category AS value, MAX(published_at) AS count
              FROM articles
-            WHERE status = 'published' AND is_on_topic = 1
+            WHERE status = 'published'
               AND category IS NOT NULL
             GROUP BY category`,
         ).all<CountRow>();

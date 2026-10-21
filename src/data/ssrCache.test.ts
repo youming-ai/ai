@@ -41,7 +41,7 @@ describe('SSR cache consumers', () => {
       CACHE: { get, put },
       DB: { prepare: () => ({ bind: () => ({ all }) }) },
     } as unknown as Env;
-    expect(await getExploreFeed({ cursor: '20530:85:1786080856000:abc123' }, env, ctx)).toEqual({
+    expect(await getExploreFeed({ cursor: '1786080856000:abc123' }, env, ctx)).toEqual({
       items: [],
       nextCursor: null,
     });

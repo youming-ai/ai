@@ -8,8 +8,6 @@ function article(overrides: Partial<ExploreArticle> = {}): ExploreArticle {
     id: 'a',
     title: 'A story',
     description: '',
-    summary: '',
-    blurb: '',
     url: 'https://example.com/story',
     imageUrl: '/og.png',
     isVideo: false,
@@ -18,9 +16,6 @@ function article(overrides: Partial<ExploreArticle> = {}): ExploreArticle {
     sourceDomain: 'example.com',
     publishedAt: 1786080856000,
     category: 'tools',
-    tags: ['tools'],
-    qualityScore: 82,
-    freshnessScore: 60,
     ...overrides,
   };
 }

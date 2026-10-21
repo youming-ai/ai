@@ -87,7 +87,7 @@ describe('the /api/* bridge', () => {
     expect(res.status).toBe(200);
     // The request arrived at `serveExplore` with its query parsed: the SWR cache
     // was consulted under the current versioned key.
-    expect(kvGet).toHaveBeenCalledWith(expect.stringContaining('explore:v5:'), 'json');
+    expect(kvGet).toHaveBeenCalledWith(expect.stringContaining('explore:v6:'), 'json');
     const body = (await res.json()) as { items: unknown[]; nextCursor: unknown };
     expect(Array.isArray(body.items)).toBe(true);
   });

@@ -19,7 +19,7 @@ Stories from earlier, independently collected sources were deleted (migration 00
 
 ## Features
 
-- **15-min cron ingest** — fetches every registered feed, applies a 7-day freshness window and a per-source cap (one publisher ships 1247 items), de-duplicates by fingerprint + canonical URL + normalized title, and stores the survivors straight into D1
+- **15-min cron ingest** — fetches every registered feed, applies a 7-day freshness window and a per-source cap (one publisher ships 1247 items), de-duplicates by fingerprint + canonical URL, and stores the survivors straight into D1
 - **KV SWR cache** — `runCached` with stale-while-revalidate, request coalescing, bounded keys (cursor pages bypass KV)
 - **Masonry board** — native CSS multi-column, infinite scroll, per-category `/[category]` hubs
 - **SEO ready** — `/rss.xml`, `/[category]/rss.xml`, `/sitemap.xml`, canonical/og tags, JSON-LD

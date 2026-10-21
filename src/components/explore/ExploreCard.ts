@@ -1,6 +1,5 @@
 import { categoryLabel } from '../../categories';
 import { sameOriginAsset, withTemporalFragment } from '../../media';
-import { articleDeck } from '../../site';
 import type { ExploreArticle } from '../../types';
 import { attr, type Html, html } from '../html';
 
@@ -24,18 +23,6 @@ function publishedTime(timestamp: number): Html {
   return html`<time datetime="${iso}" title="${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC" class="shrink-0 tabular-nums">${label}</time>`;
 }
 
-function scoreValue(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(100, Math.round(value)));
-}
-
-/** One quality colour scale for the grid strip and the list indicator. */
-function signalAccent(score: number): 'pitch' | 'amber' | 'live' {
-  if (score >= 75) return 'pitch';
-  if (score >= 45) return 'amber';
-  return 'live';
-}
-
 export default function ExploreCard({
   article,
   variant = 'grid',
@@ -50,9 +37,8 @@ export default function ExploreCard({
   priority?: boolean;
 }): Html {
   const date = publishedTime(article.publishedAt);
-  const score = scoreValue(article.qualityScore);
   const domain = article.sourceDomain || 'source';
-  const description = articleDeck(article);
+  const description = article.description;
 
   // Root-relative for our own media route (see sameOriginAsset): an <img> pinned
   // to the canonical origin breaks on any other host serving this app.
@@ -74,9 +60,8 @@ export default function ExploreCard({
           <span class="shrink-0 sm:hidden">${date}</span>
         </span>
         <span class="order-1 line-clamp-2 min-w-0 font-display text-lead text-chalk transition-colors group-hover:text-pitch sm:order-2 sm:block sm:flex-1 sm:truncate">${article.title}</span>
-        <span aria-hidden="true" title="Editorial quality: ${score}/100" class="order-3 hidden h-2 w-2 shrink-0 rounded-pill sm:inline-block" style="background-color:rgb(var(--c-${signalAccent(score)}))"></span>
         <span class="order-4 hidden ds-caption text-chalkdim sm:inline">${date}</span>
-        <span class="sr-only">Editorial quality ${score} of 100. Opens in a new tab.</span>
+        <span class="sr-only">Opens in a new tab.</span>
       </a>
     </li>`;
   }
@@ -103,7 +88,7 @@ export default function ExploreCard({
       html`<video data-preview="true" data-card-media="true" src="${withTemporalFragment(imageUrl)}" muted="" loop="" playsinline="" preload="none" aria-hidden="true" class="h-full w-full object-cover"></video>`
     : html`<img data-card-media="true"${attr('fetchpriority', priority && 'high')} src="${imageUrl}" alt="" decoding="async" class="h-full w-full object-cover transition-opacity duration-300 opacity-100" loading="${priority ? 'eager' : 'lazy'}"/>`;
 
-  return html`<article class="ds-signal contain-layout mb-3 overflow-hidden break-inside-avoid rounded-card border border-line/40 bg-panel/70" style="--signal:${score}%;--signal-accent:var(--c-${signalAccent(score)})">
+  return html`<article class="ds-card contain-layout mb-3 overflow-hidden break-inside-avoid rounded-card border border-line/40 bg-panel/70">
     <a href="${article.url}" target="_blank" rel="noopener noreferrer" class="group block">
       <div class="flex min-w-0 items-center justify-between gap-2 border-b border-line/40 px-3 py-2 ds-caption text-chalkdim">
         <span class="truncate" title="Source: ${domain}">${domain}</span>
@@ -114,14 +99,8 @@ export default function ExploreCard({
       <div class="p-3">
         <h2 class="font-display text-lead font-bold leading-lead text-chalk transition-colors duration-150 group-hover:text-pitch">${article.title}</h2>
         ${description && html`<p class="mt-1.5 ds-body line-clamp-3 text-chalkdim">${description}</p>`}
-        ${
-          (article.category || article.tags.length > 0) &&
-          html`<p class="mt-3 ds-caption uppercase tracking-data text-pitch">${article.category && categoryLabel(article.category)}${
-            article.tags.length > 0 &&
-            html`<span class="text-chalkdim">${article.category ? ' · ' : ''}${article.tags.slice(0, 3).join(', ')}</span>`
-          }</p>`
-        }
-        <p class="mt-2 flex items-center justify-between gap-2 ds-caption text-chalkdim"><span title="Editorial quality: ${score} out of 100">Quality ${score}<span class="sr-only"> out of 100</span></span>${date}</p>
+        ${article.category && html`<p class="mt-3 ds-caption uppercase tracking-data text-pitch">${categoryLabel(article.category)}</p>`}
+        <p class="mt-2 flex justify-end ds-caption text-chalkdim">${date}</p>
       </div>
     </a>
   </article>`;

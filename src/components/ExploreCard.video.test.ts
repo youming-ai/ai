@@ -23,8 +23,6 @@ const video: ExploreArticle = {
   id: 'v1',
   title: 'Launch film',
   description: '',
-  summary: '',
-  blurb: '',
   url: 'https://o.doubao.com/',
   imageUrl: 'https://cdn.example.com/hero_1080p_video.mp4',
   isVideo: true,
@@ -33,9 +31,6 @@ const video: ExploreArticle = {
   sourceDomain: 'o.doubao.com',
   publishedAt: 1789434835000,
   category: 'tools',
-  tags: ['tools'],
-  qualityScore: 90,
-  freshnessScore: 100,
 };
 
 describe('ExploreCard video preview markup', () => {

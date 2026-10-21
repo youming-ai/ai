@@ -63,16 +63,12 @@ describe('explore cache keys', () => {
 
   it('never writes a KV entry for a request that carries a cursor', async () => {
     // Regression: a well-formed cursor used to land in the cache key verbatim.
-    // Re-serialising it is not a bound — the id is taken as-is and the three
-    // numbers only have to be finite — so an unauthenticated caller could grind
+    // Re-serialising it is not a bound — the id is taken as-is and the
+    // timestamp only has to be finite — so an unauthenticated caller could grind
     // /api/explore?cursor=… and mint a fresh KV key per request. Deep pages now
     // go straight to D1.
     const { env, ctx, puts } = harness();
-    for (const cursor of [
-      '20530:85:1786080856000:abc123',
-      '20530:85:1786080856000:zzzz',
-      '20530.5:85:1786080856000:abc123',
-    ]) {
+    for (const cursor of ['1786080856000:abc123', '1786080856000:zzzz', '1786080856000.5:abc123']) {
       await serveExplore({ cursor }, env, ctx);
     }
     expect(puts).toHaveLength(0);
