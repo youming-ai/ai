@@ -110,12 +110,13 @@ function railModel(
   return { hrefFor, total, groups };
 }
 
-/** The mobile categories: one button in the bottom-left corner that fans the
- *  hubs out above it like a hand of cards. Item `--i` sits `--i` steps up and is
- *  turned `--i` steps further around the button, so the column bows to the
- *  right and every label stays near-horizontal, which a true quarter-circle of
- *  nine horizontal labels cannot do without overlapping. `<details>` toggles it
- *  with no script; `board.ts` only closes it on an outside tap or Escape. */
+/** The mobile categories: one button at the bottom centre that opens like a
+ *  folding fan. Each hub is a wedge-shaped segment pivoting on the button,
+ *  spread evenly across at most ±60°, with its label running along it: segments
+ *  right of centre read outward from the button, those left of it read inward,
+ *  so no label is ever upside down. The counts stay on the button and the
+ *  desktop rail; a segment has no room for one on a 320px screen. `<details>` toggles it with no script; `board.ts` closes it on
+ *  an outside tap or Escape and replays the opening swing. */
 function categoryFan(
   options: ExploreFilterOption[],
   value: string,
@@ -138,14 +139,21 @@ function categoryFan(
     (Object.hasOwn(CATEGORIES, value)
       ? { label: CATEGORIES[value]!.label, count: total === null ? null : 0 }
       : items[0]!);
-  return html`<details data-category-fan="true" class="ds-fan fixed bottom-4 left-4 z-20 lg:hidden">
+  // Segment angle from vertical: 15° apart, never wider than ±60°.
+  const step = items.length > 1 ? Math.min(15, 120 / (items.length - 1)) : 0;
+  return html`<details data-category-fan="true" class="ds-fan fixed bottom-4 z-20 lg:hidden">
     <summary aria-label="Categories: ${current.label}" class="relative z-10 flex min-h-11 list-none items-center gap-2 border border-line/40 bg-panel px-3 shadow-float ds-caption font-bold text-chalk [&::-webkit-details-marker]:hidden">
       ${current.label}${current.count !== null && html`<span class="tabular-nums opacity-70">${current.count}</span>`}
     </summary>
-    <nav aria-label="Categories" class="absolute bottom-full">
+    <nav aria-label="Categories">
       ${items.map((item, index) => {
         const active = item.key === value;
-        return html`<a href="${hrefFor(item.key)}" style="--i:${index}"${attr('aria-current', active && 'page')} class="ds-fan-item flex min-h-11 items-center gap-2 whitespace-nowrap border border-line/40 px-3 shadow-float ds-caption bg-panel ${active ? 'font-bold text-pitch' : 'text-chalk'}">${item.label}${item.count !== null && html`<span class="tabular-nums opacity-70">${item.count}</span>`}</a>`;
+        const angle = (index - (items.length - 1) / 2) * step;
+        // Left of centre the segment hangs from its right end and its label
+        // reads toward the button; from centre rightward, from its left end.
+        const side = angle < 0 ? 'l' : 'r';
+        const turn = side === 'l' ? angle + 90 : angle - 90;
+        return html`<a href="${hrefFor(item.key)}" style="--a:${turn}deg;--i:${index}" data-side="${side}"${attr('aria-current', active && 'page')} class="ds-fan-item flex items-center whitespace-nowrap px-3 ds-caption bg-panel ${active ? 'font-bold text-pitch' : 'text-chalk'}">${item.label}</a>`;
       })}
     </nav>
   </details>`;

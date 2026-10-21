@@ -279,7 +279,7 @@ it.each([
   expect(html).not.toContain('data-original-src');
 });
 
-it('keeps the layout and theme on top and fans the categories from the corner', () => {
+it('keeps the layout and theme on top and fans the categories from the bottom centre', () => {
   const html = ExploreView({
     initialData: { items: [], nextCursor: null },
     initialFilters: {
@@ -298,22 +298,24 @@ it('keeps the layout and theme on top and fans the categories from the corner', 
   expect(html.match(/>Grid</g)).toHaveLength(2);
   expect(html.match(/>List</g)).toHaveLength(2);
 
-  // The mobile categories are one <details> in the corner; its button names the
-  // current hub, so a closed fan still says where the reader is.
+  // The mobile categories are one <details> at the bottom centre; its button
+  // names the current hub, so a closed fan still says where the reader is.
   const fan = html.slice(html.indexOf('data-category-fan'), html.indexOf('</details>'));
   expect(fan).toContain('lg:hidden');
   expect(fan).toMatch(/<summary aria-label="Categories: Design"/);
-  // All links, then every hub, each a step further round the fan, keeping the
-  // list view; the current hub is marked.
-  const items = [...fan.matchAll(/<a href="([^"]*)" style="--i:(\d+)"/g)].map((m) => [m[1], m[2]]);
-  expect(items).toEqual([
-    ['/?view=list', '0'],
-    ['/tools?view=list', '1'],
-    ['/design?view=list', '2'],
+  // All links, then every hub, as fan segments spread evenly about the centre
+  // (15° apart): left of centre a segment hangs from its right end (turned
+  // angle + 90°) so its label reads toward the button; the rest from their left
+  // end (angle − 90°). Every one keeps the list view; the current hub is marked.
+  const segments = [
+    ...fan.matchAll(/<a href="([^"]*)" style="--a:([-\d.]+)deg;--i:(\d+)" data-side="([lr])"/g),
+  ].map((m) => [m[1], Number(m[2]), m[4]]);
+  expect(segments).toEqual([
+    ['/?view=list', 75, 'l'],
+    ['/tools?view=list', -90, 'r'],
+    ['/design?view=list', -75, 'r'],
   ]);
-  expect(fan).toMatch(/href="\/design\?view=list" style="--i:2" aria-current="page"/);
-  // 44px targets.
-  expect(fan.match(/ds-fan-item flex min-h-11/g)).toHaveLength(3);
+  expect(fan).toMatch(/href="\/design\?view=list"[^>]*aria-current="page"/);
   // The removed bar was the only backdrop-blurred surface in the markup.
   expect(html).not.toContain('backdrop-blur');
 });
