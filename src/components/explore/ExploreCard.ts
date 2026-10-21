@@ -29,7 +29,7 @@ export default function ExploreCard({
   priority = false,
 }: {
   article: ExploreArticle;
-  variant?: 'grid' | 'list';
+  variant?: 'grid' | 'list' | 'deck';
   /** Above the fold: load eagerly and ask for a high fetch priority. The board
    *  is a wall of images on a bandwidth-limited link, and with every one of them
    *  lazy they queue behind each other — measured LCP was 3.2s at Slow-4G with
@@ -86,7 +86,28 @@ export default function ExploreCard({
       // element is not focusable, and the wrapping link already carries the
       // article title as its name.
       html`<video data-preview="true" data-card-media="true" src="${withTemporalFragment(imageUrl)}" muted="" loop="" playsinline="" preload="none" aria-hidden="true" class="h-full w-full object-cover"></video>`
-    : html`<img data-card-media="true"${attr('fetchpriority', priority && 'high')} src="${imageUrl}" alt="" decoding="async" class="h-full w-full object-cover transition-opacity duration-300 opacity-100" loading="${priority ? 'eager' : 'lazy'}"/>`;
+    : html`<img data-card-media="true" draggable="false"${attr('fetchpriority', priority && 'high')} src="${imageUrl}" alt="" decoding="async" class="h-full w-full object-cover transition-opacity duration-300 opacity-100" loading="${priority ? 'eager' : 'lazy'}"/>`;
+
+  if (variant === 'deck') {
+    // One card of the swipe deck, stacked by `.ds-deck`. The data attributes are
+    // what `src/scripts/deck.ts` saves and shares, so it never reads them back
+    // out of the markup's text. `draggable="false"` keeps the browser's own
+    // link/image drag from hijacking the swipe.
+    return html`<article data-deck-card="true" data-id="${article.id}" data-url="${article.url}" data-title="${article.title}" data-domain="${domain}" class="ds-deck-card flex flex-col overflow-hidden rounded-card border border-line/40 bg-panel shadow-float">
+      <a href="${article.url}" target="_blank" rel="noopener noreferrer" draggable="false" class="flex min-h-0 flex-1 flex-col">
+        ${
+          imageUrl
+            ? html`<div data-image-frame="true" class="min-h-0 flex-1 overflow-hidden bg-overlay/5">${media}</div>`
+            : html`<div class="flex min-h-0 flex-1 items-center justify-center bg-pitch/10 p-6 font-display text-lead font-bold text-pitch">${domain}</div>`
+        }
+        <div class="shrink-0 p-4">
+          <h2 class="line-clamp-3 font-display text-lead font-bold leading-lead text-chalk">${article.title}</h2>
+          ${description && html`<p class="mt-1.5 line-clamp-3 ds-body text-chalkdim">${description}</p>`}
+          <p class="mt-3 flex items-center gap-2 ds-caption text-chalkdim"><span class="min-w-0 truncate">${domain}${article.category && html` · <span class="uppercase tracking-data text-pitch">${categoryLabel(article.category)}</span>`}</span><span class="ml-auto">${date}</span></p>
+        </div>
+      </a>
+    </article>`;
+  }
 
   return html`<article class="ds-card contain-layout mb-3 overflow-hidden break-inside-avoid rounded-card border border-line/40 bg-panel/70">
     <a href="${article.url}" target="_blank" rel="noopener noreferrer" class="group block">

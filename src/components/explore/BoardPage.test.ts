@@ -18,7 +18,7 @@ describe('shared Astro board page wiring', () => {
     expect(board).toContain('await Promise.all([');
     expect(board).toContain('getExploreFeed(category ? { category } : {}, env, ctx)');
     expect(board).toContain('getExploreFilters(env, ctx)');
-    expect(board).toContain("Astro.url.searchParams.get('view') === 'list' ? 'list' : 'grid'");
+    expect(board).toContain("parseView(Astro.url.searchParams.get('view'))");
     expect(board).toMatch(
       /set:html=\{ExploreView\(\{\s*initialData,\s*initialFilters,\s*initialCategory: category,\s*initialView,\s*\}\)\.value\}/,
     );

@@ -1,5 +1,6 @@
 import ExploreCard from '../components/explore/ExploreCard';
 import ExploreGridPage from '../components/explore/ExploreGridPage';
+import type { ViewMode } from '../components/explore/ExploreView';
 import { html } from '../components/html';
 import type { ExploreArticle } from '../types';
 
@@ -18,12 +19,12 @@ import type { ExploreArticle } from '../types';
 //
 // Grid pages balance independently; list items append directly into the <ol>.
 
-/** One page of cards as HTML, ready to append. `view` picks the list `<li>` or
- *  the grid `<article>`; appended cards are never above the fold, so they never
- *  get the eager/high-priority image treatment. */
-export function renderExploreCards(items: ExploreArticle[], view: 'grid' | 'list'): string {
+/** One page of cards as HTML, ready to append. `view` picks the grid page, the
+ *  list `<li>`s or the deck's stacked cards; appended cards are never above the
+ *  fold, so they never get the eager/high-priority image treatment. */
+export function renderExploreCards(items: ExploreArticle[], view: ViewMode): string {
   if (items.length === 0) return '';
   return view === 'grid'
     ? ExploreGridPage(items).value
-    : html`${items.map((article) => ExploreCard({ article, variant: 'list' }))}`.value;
+    : html`${items.map((article) => ExploreCard({ article, variant: view }))}`.value;
 }

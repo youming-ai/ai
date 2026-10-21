@@ -475,6 +475,43 @@ describe('board appends the next page', () => {
   });
 });
 
+describe('deck view', () => {
+  it('asks for the next deck page itself and stacks it behind the last card', async () => {
+    // The deck never scrolls its sentinel into view, so it loads when three or
+    // fewer cards remain — here, at once.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            html: renderExploreCards([card('c', 'third')], 'deck'),
+            nextCursor: null,
+          }),
+        ),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const { container } = render(
+      ExploreView({
+        initialData: feed([card('a', 'first'), card('b', 'second')], 'cur-1'),
+        initialFilters: { categories: [] },
+        initialView: 'deck',
+      }),
+    );
+    await startBoard();
+
+    await waitFor(() => {
+      expect(container.querySelectorAll('[data-deck-stack] [data-deck-card]')).toHaveLength(3);
+    });
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('view=deck');
+    const titles = Array.from(container.querySelectorAll('[data-deck-card] h2')).map(
+      (title) => title.textContent,
+    );
+    expect(titles).toEqual(['first', 'second', 'third']);
+    // The sentinel stays for its cursor but is never shown in the deck.
+    expect(container.querySelector<HTMLElement>('[data-board-sentinel]')?.hidden).toBe(true);
+  });
+});
+
 describe('masonry lanes', () => {
   it('keeps painted cards in their column and fills the shortest lane, so pages leave no gap', async () => {
     // Two columns at this width.

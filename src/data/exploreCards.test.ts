@@ -38,6 +38,28 @@ describe('renderExploreCards', () => {
     expect(html).not.toContain('data-board-page');
   });
 
+  it('renders bare stacked cards for the deck view', () => {
+    // The deck appends behind its last card, so no page wrapper and no <li>.
+    const html = renderExploreCards([article({ id: 'id-1' })], 'deck');
+    expect(html).toContain('data-deck-card="true"');
+    expect(html).toContain('data-id="id-1"');
+    expect(html).toContain('data-url="https://example.com/story"');
+    expect(html).not.toContain('data-board-page');
+    expect(html).not.toContain('<li');
+  });
+
+  it('escapes the data attributes the deck saves, not only the visible text', () => {
+    // deck.ts reads data-title and data-url back into localStorage and the saved
+    // panel, so a quote in a feed title must not end the attribute.
+    const html = renderExploreCards(
+      [article({ title: 'x" onmouseover="alert(1)', sourceDomain: '<b>d</b>' })],
+      'deck',
+    );
+    expect(html).toContain('data-title="x&quot; onmouseover=&quot;alert(1)"');
+    expect(html).toContain('data-domain="&lt;b&gt;d&lt;/b&gt;"');
+    expect(html).not.toContain('" onmouseover="');
+  });
+
   it('appended cards are never treated as above the fold', () => {
     // Priority is for the first screen only; a card appended by scrolling is
     // below the fold by definition, and asking for high priority there would

@@ -11,6 +11,8 @@
 // still renders and the rail still navigates. Scrolling loads subsequent pages
 // when JavaScript is available.
 
+import { type DeckSource, initDeck } from './deck';
+
 /** Column counts of the server's grid page (`ExploreGridPage`: md:columns-2,
  *  xl:columns-3, 2xl:columns-4), widest first. */
 const LANE_BREAKPOINTS: [query: string, lanes: number][] = [
@@ -93,9 +95,9 @@ function createLanes(board: HTMLElement): { add(cards: HTMLElement[]): void } {
 /** Infinite scroll, driven by one sentinel. The server renders the page; this
  *  appends the next one's HTML rather than rendering anything itself, so the
  *  cards cannot drift from the server-rendered ones. */
-function initAppend(board: HTMLElement): void {
+function initAppend(board: HTMLElement): DeckSource | null {
   const found = document.querySelector<HTMLElement>('[data-board-sentinel]');
-  if (!found) return;
+  if (!found) return null;
   // Bound to a non-nullable const so the narrowing survives into `load`, which
   // runs later and writes the cursor back onto the sentinel.
   const sentinel: HTMLElement = found;
@@ -104,7 +106,8 @@ function initAppend(board: HTMLElement): void {
   const failed = sentinel.querySelector<HTMLElement>('[data-board-error]');
   const end = sentinel.querySelector<HTMLElement>('[data-board-end]');
 
-  const view = board.dataset.view === 'list' ? 'list' : 'grid';
+  const view =
+    board.dataset.view === 'list' || board.dataset.view === 'deck' ? board.dataset.view : 'grid';
   const category = board.dataset.category ?? '';
   let cursor = sentinel.dataset.cursor ?? '';
   let busy = false;
@@ -113,8 +116,11 @@ function initAppend(board: HTMLElement): void {
   let failures = 0;
   let retryTimer: number | undefined;
 
-  if (!cursor) return;
+  if (!cursor) return null;
   const lanes = view === 'grid' ? createLanes(board) : null;
+  // The deck appends behind its last card; the other views append to the board.
+  const target =
+    (view === 'deck' && board.querySelector<HTMLElement>('[data-deck-stack]')) || board;
 
   async function load(): Promise<void> {
     if (busy || !cursor || stopped || retryTimer !== undefined) return;
@@ -143,9 +149,9 @@ function initAppend(board: HTMLElement): void {
         lanes.add(cards);
         wireMedia(cards);
       } else {
-        const existing = board.children.length;
-        board.insertAdjacentHTML('beforeend', page.html);
-        wireMedia(Array.from(board.children).slice(existing));
+        const existing = target.children.length;
+        target.insertAdjacentHTML('beforeend', page.html);
+        wireMedia(Array.from(target.children).slice(existing));
       }
       cursor = page.nextCursor ?? '';
       failures = 0;
@@ -216,6 +222,7 @@ function initAppend(board: HTMLElement): void {
     },
     { once: true },
   );
+  return { load, hasMore: () => cursor !== '' };
 }
 
 /** Theme switching for every instance on the page (the rail renders the control
@@ -383,7 +390,9 @@ reducedMotion.addEventListener('change', syncPreviews);
 wireMedia([document]);
 
 const board = document.querySelector<HTMLElement>('[data-board]');
-if (board) initAppend(board);
+if (board) {
+  // The deck never scrolls the sentinel into view, so it asks for pages itself.
+  const source = initAppend(board);
+  if (board.dataset.view === 'deck') initDeck(board, source, () => reducedMotion?.matches ?? false);
+}
 initTheme();
-
-export {};

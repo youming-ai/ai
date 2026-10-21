@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { env } from 'cloudflare:workers';
 import { getExploreFeed, exploreQueryFromUrl } from '../data/api';
+import { parseView } from '../components/explore/ExploreView';
 import { renderExploreCards } from '../data/exploreCards';
 
 export const prerender = false;
@@ -18,7 +19,7 @@ export const prerender = false;
 // path, the keyset cursor and the category validation are the API's, not a
 // second implementation of them.
 export const GET: APIRoute = async ({ url, locals }) => {
-  const view = url.searchParams.get('view') === 'list' ? 'list' : 'grid';
+  const view = parseView(url.searchParams.get('view'));
   const feed = await getExploreFeed(
     exploreQueryFromUrl(url),
     env,

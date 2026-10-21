@@ -47,7 +47,9 @@ const BUDGETS = [
   {
     key: 'client CSS',
     match: (rel) => rel.endsWith('.css'),
-    limit: 6_000,
+    // 6_000 until the swipe deck: the board was at 5.9KB, and the deck's rules
+    // and utilities measured ~420 bytes on top.
+    limit: 6_500,
     why: 'The stylesheet is render-blocking, so it is on the critical path.',
   },
   {

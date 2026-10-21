@@ -17,7 +17,16 @@ import ExploreGridPage from './ExploreGridPage';
  *  that pins the eager/lazy boundary cannot drift from the value. */
 export const ABOVE_THE_FOLD_CARDS = 4;
 
-export type ViewMode = 'grid' | 'list';
+export type ViewMode = 'grid' | 'list' | 'deck';
+
+const VIEW_LABELS: Record<ViewMode, string> = { grid: 'Grid', list: 'List', deck: 'Deck' };
+
+/** `?view=` is untrusted and only picks a layout, so anything unrecognised is
+ *  the grid: a stale link should render cards, not an error. The one parser for
+ *  the page, the hub and `/cards.json`. */
+export function parseView(value: string | null): ViewMode {
+  return value === 'list' || value === 'deck' ? value : 'grid';
+}
 
 const SKELETON_CARD = html`<div class="h-56 animate-pulse rounded-card bg-overlay/5"></div>`;
 
@@ -61,7 +70,7 @@ function categoryRail(
   providedTotal: number | null | undefined,
   view: ViewMode,
 ): Html {
-  const hrefFor = (v: string) => `${v ? `/${v}` : '/'}${view === 'list' ? '?view=list' : ''}`;
+  const hrefFor = (v: string) => `${v ? `/${v}` : '/'}${view === 'grid' ? '' : `?view=${view}`}`;
   // Unknown counts sum to null, not zero: an outage should leave the label bare
   // rather than assert the site holds no links. An empty list is the opposite
   // case — a successful count over an empty corpus — and is known to be zero,
@@ -136,12 +145,45 @@ export default function ExploreView({
     initialView,
   );
 
+  // How many links this scope holds, for the deck's "3 / 81". Null when the
+  // count failed, and the deck then shows the position alone.
+  const deckTotal = initialCategory
+    ? (initialFilters.categories.find((option) => option.value === initialCategory)?.count ?? null)
+    : initialFilters.total;
+
+  // The stack fills the screen minus what sits around it: on mobile the sticky
+  // bar (~6.5rem), the progress row, the buttons and their padding (16rem in
+  // all); on desktop the rail is beside it, so only the deck's own rows.
   const cards =
-    initialView === 'list'
-      ? html`<ol data-board="true" data-view="list" data-category="${initialCategory}" class="divide-y divide-line/30 border-b border-line/30" aria-label="Explore links">
+    initialView === 'deck'
+      ? html`<section data-board="true" data-view="deck" data-category="${initialCategory}"${attr('data-total', deckTotal !== null && String(deckTotal))} class="ds-deck mx-auto flex w-full max-w-md flex-col gap-3 px-3 pt-3" aria-label="Explore links, one at a time">
+          <div class="flex items-center justify-between gap-2 ds-caption text-chalkdim">
+            <output data-deck-progress="true" class="tabular-nums">1${deckTotal !== null && ` / ${deckTotal}`}</output>
+            <details data-deck-saved="true" class="relative">
+              <summary class="flex min-h-9 cursor-pointer list-none items-center gap-1.5 rounded-pill px-3 hover:bg-overlay/10 [&::-webkit-details-marker]:hidden">♥ Saved <span data-deck-saved-count="true" class="tabular-nums">0</span></summary>
+              <div class="absolute right-0 z-30 mt-1 max-h-[60dvh] w-72 overflow-y-auto rounded-card border border-line/40 bg-panel p-2 shadow-float">
+                <ol data-deck-saved-list="true" class="space-y-1"></ol>
+                <p data-deck-saved-empty="true" class="p-2">Swipe right, or press ♥, to keep a link here. Saved on this device only.</p>
+              </div>
+            </details>
+          </div>
+          <div data-deck-stack="true" tabindex="0" aria-describedby="deck-help" class="ds-deck-stack relative h-[min(calc(100dvh-16rem),36rem)] outline-none lg:h-[min(calc(100dvh-10rem),40rem)]">
+            ${initialData.items.map((article, index) => ExploreCard({ article, variant: 'deck', priority: index === 0 }))}
+            <p data-deck-done="true" hidden="" class="absolute inset-0 flex items-center justify-center p-8 text-center ds-body text-chalkdim">That's everything here. Your saved links are under ♥ Saved.</p>
+          </div>
+          <div class="flex items-center justify-center gap-4 pb-4">
+            <button type="button" data-deck-action="skip" aria-label="Skip" class="flex h-14 w-14 items-center justify-center rounded-pill border border-line/40 bg-panel text-live shadow-float">✕</button>
+            <button type="button" data-deck-action="share" aria-label="Share" class="flex h-14 w-14 items-center justify-center rounded-pill border border-line/40 bg-panel text-chalkdim shadow-float">↑</button>
+            <button type="button" data-deck-action="save" aria-label="Save" class="flex h-14 w-14 items-center justify-center rounded-pill border border-line/40 bg-panel text-pitch shadow-float">♥</button>
+          </div>
+          <p id="deck-help" class="sr-only">Swipe or press the left arrow to skip, the right arrow to save, the up arrow to share. Tap a card to open it.</p>
+          <p data-deck-status="true" class="sr-only" aria-live="polite"></p>
+        </section>`
+      : initialView === 'list'
+        ? html`<ol data-board="true" data-view="list" data-category="${initialCategory}" class="divide-y divide-line/30 border-b border-line/30" aria-label="Explore links">
           ${initialData.items.map((article) => ExploreCard({ article, variant: 'list' }))}
         </ol>`
-      : html`<section data-board="true" data-view="grid" data-category="${initialCategory}" class="px-3 pt-3" aria-label="Explore links">
+        : html`<section data-board="true" data-view="grid" data-category="${initialCategory}" class="px-3 pt-3" aria-label="Explore links">
           ${ExploreGridPage(initialData.items, ABOVE_THE_FOLD_CARDS)}
         </section>`;
 
@@ -164,9 +206,9 @@ export default function ExploreView({
   // for the free space to split around.
   const controls = html`<div class="flex items-center justify-between gap-2">
     <nav class="ds-segmented shrink-0" aria-label="Feed layout">
-      ${(['grid', 'list'] as const).map(
+      ${(['grid', 'list', 'deck'] as const).map(
         (view) =>
-          html`<a href="?view=${view}"${attr('aria-current', initialView === view && 'true')} class="ds-seg-tab min-h-9 px-2.5 text-xs ${initialView === view ? 'ds-seg-tab-active' : 'ds-seg-tab-inactive'}">${view === 'grid' ? 'Grid' : 'List'}</a>`,
+          html`<a href="?view=${view}"${attr('aria-current', initialView === view && 'true')} class="ds-seg-tab min-h-9 px-2.5 text-xs ${initialView === view ? 'ds-seg-tab-active' : 'ds-seg-tab-inactive'}">${VIEW_LABELS[view]}</a>`,
       )}
     </nav>
     ${THEME_TOGGLE}
@@ -204,7 +246,7 @@ export default function ExploreView({
         <div id="explore-results" tabindex="-1" class="scroll-mt-28 lg:scroll-mt-4">${feed}</div>
         ${
           hasItems &&
-          html`<div data-board-sentinel="true" data-cursor="${cursor}" class="flex flex-col items-center gap-2 px-3 py-6" aria-live="polite">
+          html`<div data-board-sentinel="true" data-cursor="${cursor}"${attr('hidden', initialView === 'deck')} class="flex flex-col items-center gap-2 px-3 py-6" aria-live="polite">
             <div data-board-loading="true" hidden="" class="w-full" role="status">
               <span class="sr-only">Loading more stories</span>
               ${
