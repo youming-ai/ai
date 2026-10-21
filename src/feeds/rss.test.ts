@@ -22,8 +22,6 @@ const source: FeedSource = {
   kind: 'rss',
   name: 'Test Hardware',
   url: 'https://example.com/rss.xml',
-  authorityScore: 80,
-  defaultEnabled: true,
   maxItems: 50,
 };
 

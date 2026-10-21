@@ -285,7 +285,6 @@ describe('storeArticle', () => {
   const article: RawArticle = {
     sourceId: 'poche-explore',
     sourceName: 'Poche Explore',
-    sourceAuthority: 90,
     category: 'Tools',
     title: 'A stored story',
     description: 'Teaser',

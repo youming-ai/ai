@@ -21,8 +21,6 @@ const FEED_SOURCE_DEFS: FeedSource[] = [
     kind: 'rss',
     name: 'Poche Explore',
     url: 'https://poche.app/explore/rss',
-    authorityScore: 90,
-    defaultEnabled: true,
     maxItems: 50,
   },
 ];

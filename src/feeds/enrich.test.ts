@@ -27,7 +27,6 @@ describe('normalizeTitle', () => {
 const ARTICLE: RawArticle = {
   sourceId: 'poche-explore',
   sourceName: 'Poche Explore',
-  sourceAuthority: 90,
   category: 'design',
   title: 'thonik – Home',
   description: 'Dutch studio thonik.',

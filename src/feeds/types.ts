@@ -5,8 +5,6 @@ export interface FeedSource {
   kind: FeedSourceKind;
   name: string;
   url: string;
-  authorityScore: number;
-  defaultEnabled: boolean;
   /** Newest-N cap applied per tick, after the freshness window. Several
    *  publishers ship their whole archive in the feed — openai.com/news returns
    *  1247 items — and without a cap the first tick stores the archive. Measured per source with
@@ -19,7 +17,6 @@ export interface FeedSource {
 export interface RawArticle {
   sourceId: string;
   sourceName: string;
-  sourceAuthority: number;
   category: string | null;
   title: string;
   description: string;
