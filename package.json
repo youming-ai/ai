@@ -21,8 +21,8 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro check && tsc -p tsconfig.worker.json && astro build && node scripts/perf-budget.mjs",
-    "deploy": "void deploy --platform cloudflare",
-    "db:migrate": "void db migrate --remote",
+    "deploy": "./scripts/deploy.sh",
+    "db:migrate": "bunx --bun void db migrate --remote",
     "typecheck": "astro check && tsc -p tsconfig.worker.json",
     "preview": "astro preview",
     "test": "vitest",

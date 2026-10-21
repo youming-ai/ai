@@ -104,7 +104,7 @@ graph TD
 
 ## Deployment
 
-Deploy by hand with `bunx --bun void deploy --platform cloudflare` after `bunx vitest run` and `bun run build` (typecheck and byte budgets, which `void deploy` skips); the first run signs you in. Void saves a D1 Time Travel restore point before applying migrations and prints the `void db restore` command; `void project rollback` restores an earlier Worker version with its triggers.
+Cloudflare Workers Builds deploys every push to `main`: build command `bun run build` (typecheck and byte budgets, which `void deploy` skips), deploy command `bun run deploy` (`scripts/deploy.sh` → `bunx --bun void deploy --platform cloudflare`). Run `bun run deploy` locally to deploy by hand; the first run signs you in. Void saves a D1 Time Travel restore point before applying migrations and prints the `void db restore` command; `void project rollback` restores an earlier Worker version with its triggers.
 
 Free-tier notes: ingest writes directly to D1; no Durable Objects on purpose — Void stages and verifies each upload before switching traffic, which a Durable Object that cannot be staged defeats.
 
