@@ -303,21 +303,13 @@ it('keeps the layout and theme on top and opens the categories as a bottom sheet
   const sheet = html.slice(html.indexOf('data-category-sheet'), html.indexOf('</details>'));
   expect(sheet).toContain('lg:hidden');
   expect(sheet).toMatch(/<summary aria-label="Categories: Design"/);
-  // All links, then every hub: each tile keeps the list view, shows its count,
-  // and carries its share of all links for the bar; the current hub is marked.
-  const tiles = [...sheet.matchAll(/<a href="([^"]*)" style="--i:(\d+);--w:(\d+)%"/g)].map((m) => [
-    m[1],
-    Number(m[3]),
-  ]);
-  expect(tiles).toEqual([
-    ['/?view=list', 100],
-    ['/tools?view=list', 62],
-    ['/design?view=list', 38],
-  ]);
-  expect(sheet).toMatch(/href="\/design\?view=list"[^>]*aria-current="page"/);
-  expect(sheet).toContain('>81</span>');
-  // Tiles are well over 44px tall.
-  expect(sheet.match(/ds-sheet-tile relative flex min-h-16/g)).toHaveLength(3);
+  // Inside is the same rail the desktop column shows — the same rows and
+  // counts, keeping the list view, the current hub marked — under a grab handle.
+  const rows = [...sheet.matchAll(/<a href="([^"]*)"/g)].map((m) => m[1]);
+  expect(rows).toEqual(['/?view=list', '/tools?view=list', '/design?view=list']);
+  expect(sheet).toMatch(/href="\/design\?view=list" aria-current="page"/);
+  expect(sheet).toContain('data-sheet-grip="true"');
+  expect(sheet).toMatch(/>✕ Close</);
   // The removed bar was the only backdrop-blurred surface in the markup.
   expect(html).not.toContain('backdrop-blur');
 });

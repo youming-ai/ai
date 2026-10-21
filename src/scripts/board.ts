@@ -386,14 +386,46 @@ const board = document.querySelector<HTMLElement>('[data-board]');
 if (board) initAppend(board);
 initTheme();
 
-// The mobile category sheet opens and closes as a native <details>; this only
-// adds the two ways out a menu is expected to have. A tap on the backdrop lands
-// on the <details> element itself (the backdrop is its ::before).
+// The mobile category sheet opens as a native <details>; this adds what a
+// sheet is expected to do on the way out. A tap on the backdrop lands on the
+// <details> element itself (the backdrop is its ::before).
 const sheet = document.querySelector<HTMLDetailsElement>('[data-category-sheet]');
-if (sheet) {
+const sheetPanel = sheet?.querySelector<HTMLElement>('.ds-sheet-panel');
+if (sheet && sheetPanel) {
+  const SHEET_OUT_MS = 240;
+  let closing = 0;
+  const finish = () => {
+    window.clearTimeout(closing);
+    closing = 0;
+    sheet.open = false;
+    delete sheet.dataset.closing;
+    sheetPanel.style.transform = '';
+    sheetPanel.style.transition = '';
+  };
+  // A <details> on its own vanishes in one frame, so play the way out first.
+  // It slides from wherever the panel is, so a drag finishes from the finger.
+  const close = () => {
+    if (!sheet.open || closing) return;
+    if (reducedMotion?.matches) {
+      finish();
+      return;
+    }
+    sheet.dataset.closing = 'true';
+    closing = window.setTimeout(finish, SHEET_OUT_MS);
+  };
+
+  sheet.querySelector('summary')?.addEventListener('click', (event) => {
+    if (!sheet.open) return;
+    event.preventDefault();
+    close();
+  });
   document.addEventListener('click', (event) => {
-    if (sheet.open && (event.target === sheet || !sheet.contains(event.target as Node))) {
-      sheet.open = false;
+    if (sheet.open && (event.target === sheet || !sheet.contains(event.target as Node))) close();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && sheet.open) {
+      close();
+      sheet.querySelector('summary')?.focus();
     }
   });
   // Chrome skips styling a closed <details>' content, so the motion keyed on
@@ -401,18 +433,41 @@ if (sheet) {
   // resolution restarts it on every open.
   sheet.addEventListener('toggle', () => {
     if (!sheet.open) return;
-    for (const part of sheet.querySelectorAll<HTMLElement>('.ds-sheet-panel, .ds-sheet-tile')) {
+    for (const part of sheet.querySelectorAll<HTMLElement>('.ds-sheet-panel')) {
       part.style.animation = 'none';
       void part.offsetWidth;
       part.style.animation = '';
     }
   });
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && sheet.open) {
-      sheet.open = false;
-      sheet.querySelector('summary')?.focus();
-    }
+
+  // The grab handle drags the panel down; past a quarter of its height, or on
+  // a quick flick, it goes, and otherwise it settles back.
+  const grip = sheet.querySelector<HTMLElement>('[data-sheet-grip]');
+  let drag: { y: number; dy: number; at: number } | null = null;
+  grip?.addEventListener('pointerdown', (event) => {
+    drag = { y: event.clientY, dy: 0, at: performance.now() };
+    grip.setPointerCapture?.(event.pointerId);
+    sheetPanel.style.transition = 'none';
   });
+  grip?.addEventListener('pointermove', (event) => {
+    if (!drag) return;
+    drag.dy = Math.max(0, event.clientY - drag.y);
+    sheetPanel.style.transform = `translateY(${drag.dy}px)`;
+  });
+  const release = () => {
+    if (!drag) return;
+    const { dy, at } = drag;
+    drag = null;
+    const flicked = dy > 24 && dy / (performance.now() - at) > 0.6;
+    if (dy > sheetPanel.offsetHeight / 4 || flicked) {
+      close();
+    } else {
+      sheetPanel.style.transition = `transform ${SHEET_OUT_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`;
+      sheetPanel.style.transform = '';
+    }
+  };
+  grip?.addEventListener('pointerup', release);
+  grip?.addEventListener('pointercancel', release);
 }
 
 export {};

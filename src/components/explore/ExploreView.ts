@@ -83,7 +83,7 @@ function categoryRail(
   </div>`;
 }
 
-/** What the desktop rail and the mobile sheet both show: the links keep the
+/** What the category rail shows (in the desktop column and the mobile sheet): the links keep the
  *  current view, the All count, and the registry's groups in display order. */
 function railModel(
   options: ExploreFilterOption[],
@@ -111,52 +111,21 @@ function railModel(
 }
 
 /** The mobile categories: one button at the bottom centre that opens a bottom
- *  sheet. The sheet springs up over a dimmed page and its tiles cascade in; each
- *  tile carries the hub's count and a bar for its share of all links, in the
- *  rail's groups. While open, the button turns into the sheet's Close.
- *  `<details>` toggles it with no script; `board.ts` closes it on an outside
- *  tap or Escape and replays the opening motion. */
-function categorySheet(
-  options: ExploreFilterOption[],
-  value: string,
-  providedTotal: number | null | undefined,
-  view: ViewMode,
-): Html {
-  const { hrefFor, total, groups } = railModel(options, providedTotal, view);
-  const label = (key: string) => (key ? (CATEGORIES[key]?.label ?? key) : GLOBAL_FEED_LABEL);
-  const current = {
-    label: label(value),
-    count: value
-      ? (options.find((option) => option.value === value)?.count ?? (total === null ? null : 0))
-      : total,
-  };
-  let index = 0;
-  const tile = (key: string, count: number | null, wide = false) => {
-    const active = key === value;
-    // The bar is this hub's share of every link; unknown counts draw none.
-    const share = count !== null && total ? Math.round((count / total) * 100) : 0;
-    return html`<a href="${hrefFor(key)}" style="--i:${index++};--w:${share}%"${attr('aria-current', active && 'page')} class="ds-sheet-tile relative flex min-h-16 justify-between overflow-hidden border p-3 ${wide ? 'col-span-3 items-center' : 'flex-col'} ${active ? 'border-pitch bg-pitch/15 text-pitch' : 'border-line/40 bg-night text-chalk'}">
-      <span class="ds-caption ${active ? 'font-bold' : ''}">${label(key)}</span>
-      ${count !== null && html`<span class="font-display text-lead font-bold tabular-nums">${count}</span>`}
-    </a>`;
-  };
+ *  sheet holding the same rail the desktop column shows — the same rows, group
+ *  headings and counts, two to a line with 44px rows. While open the button
+ *  becomes the sheet's Close. `<details>` toggles it with no script; `board.ts`
+ *  animates the way in and out, closes it on an outside tap or Escape, and lets
+ *  the grab handle drag it down. */
+function categorySheet(rail: Html, label: string, count: number | null): Html {
   return html`<details data-category-sheet="true" class="ds-sheet group fixed bottom-4 z-20 lg:hidden">
-    <summary aria-label="Categories: ${current.label}" class="relative z-10 flex min-h-11 list-none items-center gap-2 border border-line/40 bg-panel px-4 shadow-float ds-caption font-bold text-chalk [&::-webkit-details-marker]:hidden">
-      <span class="group-open:hidden">${current.label}${current.count !== null && html` <span class="tabular-nums opacity-70">${current.count}</span>`}</span>
+    <summary aria-label="Categories: ${label}" class="relative z-10 flex min-h-11 list-none items-center gap-2 border border-line/40 bg-panel px-4 shadow-float ds-caption font-bold text-chalk [&::-webkit-details-marker]:hidden">
+      <span class="group-open:hidden">${label}${count !== null && html` <span class="tabular-nums opacity-70">${count}</span>`}</span>
       <span class="hidden group-open:inline">✕ Close</span>
     </summary>
-    <nav aria-label="Categories" class="ds-sheet-panel fixed inset-x-0 bottom-0 max-h-[80dvh] overflow-y-auto border-t border-line/40 bg-panel px-4 pt-3 pb-20 shadow-float">
-      <div aria-hidden="true" class="mx-auto mb-4 h-1 w-10 bg-line"></div>
-      <div class="grid grid-cols-3 gap-2">
-        ${tile('', total, true)}
-        ${groups.map(
-          (
-            group,
-          ) => html`<p class="col-span-3 pt-3 ds-micro uppercase tracking-caption text-chalkdim">${group.label}</p>
-            ${group.options.map((option) => tile(option.value, option.count))}`,
-        )}
-      </div>
-    </nav>
+    <div class="ds-sheet-panel fixed inset-x-0 bottom-0 max-h-[80dvh] overflow-y-auto border-t border-line/40 bg-panel px-3 pb-20 shadow-float">
+      <div data-sheet-grip="true" aria-hidden="true" class="flex h-8 items-center justify-center"><span class="h-1 w-10 bg-line"></span></div>
+      <nav aria-label="Categories">${rail}</nav>
+    </div>
   </details>`;
 }
 
@@ -195,13 +164,17 @@ export default function ExploreView({
     initialFilters.total,
     initialView,
   );
+  // The mobile sheet's button names where the reader is, with its count; a hub
+  // with no rows is still named, at zero when counts are known.
+  const currentCount = initialCategory
+    ? (initialFilters.categories.find((option) => option.value === initialCategory)?.count ??
+      (initialFilters.total === null ? null : 0))
+    : (initialFilters.total ?? null);
   const sheet = categorySheet(
-    initialFilters.categories,
-    initialCategory,
-    initialFilters.total,
-    initialView,
+    rail,
+    initialCategory ? (CATEGORIES[initialCategory]?.label ?? initialCategory) : GLOBAL_FEED_LABEL,
+    currentCount,
   );
-
   const cards =
     initialView === 'list'
       ? html`<ol data-board="true" data-view="list" data-category="${initialCategory}" class="divide-y divide-line/30 border-b border-line/30" aria-label="Explore links">
