@@ -279,7 +279,7 @@ it.each([
   expect(html).not.toContain('data-original-src');
 });
 
-it('keeps the layout and theme on top and fans the categories from the bottom centre', () => {
+it('keeps the layout and theme on top and opens the categories as a bottom sheet', () => {
   const html = ExploreView({
     initialData: { items: [], nextCursor: null },
     initialFilters: {
@@ -299,23 +299,17 @@ it('keeps the layout and theme on top and fans the categories from the bottom ce
   expect(html.match(/>List</g)).toHaveLength(2);
 
   // The mobile categories are one <details> at the bottom centre; its button
-  // names the current hub, so a closed fan still says where the reader is.
-  const fan = html.slice(html.indexOf('data-category-fan'), html.indexOf('</details>'));
-  expect(fan).toContain('lg:hidden');
-  expect(fan).toMatch(/<summary aria-label="Categories: Design"/);
-  // All links, then every hub, as fan segments spread evenly about the centre
-  // (15° apart): left of centre a segment hangs from its right end (turned
-  // angle + 90°) so its label reads toward the button; the rest from their left
-  // end (angle − 90°). Every one keeps the list view; the current hub is marked.
-  const segments = [
-    ...fan.matchAll(/<a href="([^"]*)" style="--a:([-\d.]+)deg;--i:(\d+)" data-side="([lr])"/g),
-  ].map((m) => [m[1], Number(m[2]), m[4]]);
-  expect(segments).toEqual([
-    ['/?view=list', 75, 'l'],
-    ['/tools?view=list', -90, 'r'],
-    ['/design?view=list', -75, 'r'],
-  ]);
-  expect(fan).toMatch(/href="\/design\?view=list"[^>]*aria-current="page"/);
+  // names the current hub, so a closed sheet still says where the reader is.
+  const sheet = html.slice(html.indexOf('data-category-sheet'), html.indexOf('</details>'));
+  expect(sheet).toContain('lg:hidden');
+  expect(sheet).toMatch(/<summary aria-label="Categories: Design"/);
+  // Inside is the same rail the desktop column shows — the same rows and
+  // counts, keeping the list view, the current hub marked — under a grab handle.
+  const rows = [...sheet.matchAll(/<a href="([^"]*)"/g)].map((m) => m[1]);
+  expect(rows).toEqual(['/?view=list', '/tools?view=list', '/design?view=list']);
+  expect(sheet).toMatch(/href="\/design\?view=list" aria-current="page"/);
+  expect(sheet).toContain('data-sheet-grip="true"');
+  expect(sheet).toMatch(/>✕ Close</);
   // The removed bar was the only backdrop-blurred surface in the markup.
   expect(html).not.toContain('backdrop-blur');
 });

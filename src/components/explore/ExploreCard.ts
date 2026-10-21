@@ -99,8 +99,7 @@ export default function ExploreCard({
       <div class="p-3">
         <h2 class="font-display text-lead font-bold leading-lead text-chalk transition-colors duration-150 group-hover:text-pitch">${article.title}</h2>
         ${description && html`<p class="mt-1.5 ds-body line-clamp-3 text-chalkdim">${description}</p>`}
-        ${article.category && html`<p class="mt-3 ds-caption uppercase tracking-data text-pitch">${categoryLabel(article.category)}</p>`}
-        <p class="mt-2 flex justify-end ds-caption text-chalkdim">${date}</p>
+        <p class="mt-3 flex items-baseline justify-between gap-2 ds-caption text-chalkdim">${article.category && html`<span class="uppercase tracking-data text-pitch">${categoryLabel(article.category)}</span>`}<span class="ml-auto">${date}</span></p>
       </div>
     </a>
   </article>`;

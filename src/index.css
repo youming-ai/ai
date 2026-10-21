@@ -200,61 +200,63 @@
     @apply font-body text-body leading-body;
   }
 
-  /* Mobile category fan (ExploreView's categoryFan): a folding fan opening
-     from the button at the bottom centre. Each hub is one segment — a wedge
-     clipped to a point at the button's top centre and turned to --a — so the
-     segments tile the half-disc without overlapping and every label keeps its
-     whole wedge. Left-hand segments hang from their right end so their labels
-     read toward the button and are never upside down. They swing out from
-     upright by an animation keyed on [open] (a closed <details> hides its
-     content with content-visibility, so a transition never sees a
-     before-state; board.ts restarts the animation on each open). The backdrop
-     is the open details' own ::before: a tap on it lands on <details>, and
-     board.ts closes it. No transform on .ds-fan itself — that would make it the
-     containing block for the fixed backdrop. */
-  .ds-fan {
+  /* Mobile category sheet (ExploreView's categorySheet): the desktop rail in a
+     bottom sheet, two rows to a line at 44px. It eases in on the curve native
+     sheets use, the backdrop fades, and board.ts plays the way out
+     ([data-closing]) before it closes the <details> — which on its own would
+     vanish in one frame. ds-sink has only a `to` keyframe, so it starts from
+     wherever the panel is, including mid-drag. The opening motion is keyed on [open]; a closed
+     <details> hides its content with content-visibility, so board.ts restarts
+     it on each open. The backdrop is the open details' own ::before: a tap on
+     it lands on <details>. No transform on .ds-sheet itself — that would make it
+     the containing block for the fixed panel and backdrop. */
+  .ds-sheet {
     inset-inline: 0;
     margin-inline: auto;
     width: max-content;
   }
-  .ds-fan[open]::before {
+  .ds-sheet[open]::before {
     content: '';
     position: fixed;
     inset: 0;
     background: rgb(var(--c-bg) / 0.7);
   }
-  .ds-fan nav {
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
+  .ds-sheet nav > div > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 0.5rem;
   }
-  .ds-fan-item {
-    position: absolute;
-    bottom: -1.375rem;
-    width: min(13rem, 46vw);
-    height: 2.75rem;
-    transform: rotate(var(--a));
+  .ds-sheet nav p {
+    grid-column: 1 / -1;
   }
-  .ds-fan-item[data-side='r'] {
-    --upright: -90deg;
-    left: 0;
-    transform-origin: 0 50%;
-    justify-content: flex-end;
-    clip-path: polygon(0 50%, 100% 0, 100% 100%);
-  }
-  .ds-fan-item[data-side='l'] {
-    --upright: 90deg;
-    right: 0;
-    transform-origin: 100% 50%;
-    clip-path: polygon(100% 50%, 0 0, 0 100%);
+  [data-sheet-grip] {
+    touch-action: none;
   }
   @media (prefers-reduced-motion: no-preference) {
-    .ds-fan[open] .ds-fan-item {
-      animation: ds-fan 320ms var(--ease-out) calc(var(--i) * 20ms) backwards;
+    .ds-sheet[open]::before {
+      animation: ds-in 300ms ease-out;
+    }
+    .ds-sheet[open] .ds-sheet-panel {
+      animation: ds-rise 420ms cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .ds-sheet[data-closing]::before {
+      animation: ds-out 240ms ease-in forwards;
+    }
+    .ds-sheet[data-closing] .ds-sheet-panel {
+      animation: ds-sink 240ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
     }
   }
-  @keyframes ds-fan {
-    from { transform: rotate(var(--upright)); }
+  @keyframes ds-rise {
+    from { transform: translateY(100%); }
+  }
+  @keyframes ds-sink {
+    to { transform: translateY(100%); }
+  }
+  @keyframes ds-in {
+    from { opacity: 0; }
+  }
+  @keyframes ds-out {
+    to { opacity: 0; }
   }
 
   /* Story card. */
@@ -323,4 +325,11 @@
 }
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* The rail's rows are 28px on desktop (min-h-7); in the mobile sheet they are
+   touch targets. Unlayered, because a utility outranks anything in the
+   components layer regardless of specificity. */
+.ds-sheet nav a {
+  min-height: 2.75rem;
 }

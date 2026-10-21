@@ -83,7 +83,7 @@ function categoryRail(
   </div>`;
 }
 
-/** What the desktop rail and the mobile fan both show: the links keep the
+/** What the category rail shows (in the desktop column and the mobile sheet): the links keep the
  *  current view, the All count, and the registry's groups in display order. */
 function railModel(
   options: ExploreFilterOption[],
@@ -110,52 +110,22 @@ function railModel(
   return { hrefFor, total, groups };
 }
 
-/** The mobile categories: one button at the bottom centre that opens like a
- *  folding fan. Each hub is a wedge-shaped segment pivoting on the button,
- *  spread evenly across at most ±60°, with its label running along it: segments
- *  right of centre read outward from the button, those left of it read inward,
- *  so no label is ever upside down. The counts stay on the button and the
- *  desktop rail; a segment has no room for one on a 320px screen. `<details>` toggles it with no script; `board.ts` closes it on
- *  an outside tap or Escape and replays the opening swing. */
-function categoryFan(
-  options: ExploreFilterOption[],
-  value: string,
-  providedTotal: number | null | undefined,
-  view: ViewMode,
-): Html {
-  const { hrefFor, total, groups } = railModel(options, providedTotal, view);
-  const items = [
-    { label: GLOBAL_FEED_LABEL, count: total, key: '' },
-    ...groups
-      .flatMap((group) => group.options)
-      .map((option) => ({
-        label: CATEGORIES[option.value]?.label ?? option.label,
-        count: option.count,
-        key: option.value,
-      })),
-  ];
-  const current =
-    items.find((item) => item.key === value) ??
-    (Object.hasOwn(CATEGORIES, value)
-      ? { label: CATEGORIES[value]!.label, count: total === null ? null : 0 }
-      : items[0]!);
-  // Segment angle from vertical: 15° apart, never wider than ±60°.
-  const step = items.length > 1 ? Math.min(15, 120 / (items.length - 1)) : 0;
-  return html`<details data-category-fan="true" class="ds-fan fixed bottom-4 z-20 lg:hidden">
-    <summary aria-label="Categories: ${current.label}" class="relative z-10 flex min-h-11 list-none items-center gap-2 border border-line/40 bg-panel px-3 shadow-float ds-caption font-bold text-chalk [&::-webkit-details-marker]:hidden">
-      ${current.label}${current.count !== null && html`<span class="tabular-nums opacity-70">${current.count}</span>`}
+/** The mobile categories: one button at the bottom centre that opens a bottom
+ *  sheet holding the same rail the desktop column shows — the same rows, group
+ *  headings and counts, two to a line with 44px rows. While open the button
+ *  becomes the sheet's Close. `<details>` toggles it with no script; `board.ts`
+ *  animates the way in and out, closes it on an outside tap or Escape, and lets
+ *  the grab handle drag it down. */
+function categorySheet(rail: Html, label: string, count: number | null): Html {
+  return html`<details data-category-sheet="true" class="ds-sheet group fixed bottom-4 z-20 lg:hidden">
+    <summary aria-label="Categories: ${label}" class="relative z-10 flex min-h-11 list-none items-center gap-2 border border-line/40 bg-panel px-4 shadow-float ds-caption font-bold text-chalk [&::-webkit-details-marker]:hidden">
+      <span class="group-open:hidden">${label}${count !== null && html` <span class="tabular-nums opacity-70">${count}</span>`}</span>
+      <span class="hidden group-open:inline">✕ Close</span>
     </summary>
-    <nav aria-label="Categories">
-      ${items.map((item, index) => {
-        const active = item.key === value;
-        const angle = (index - (items.length - 1) / 2) * step;
-        // Left of centre the segment hangs from its right end and its label
-        // reads toward the button; from centre rightward, from its left end.
-        const side = angle < 0 ? 'l' : 'r';
-        const turn = side === 'l' ? angle + 90 : angle - 90;
-        return html`<a href="${hrefFor(item.key)}" style="--a:${turn}deg;--i:${index}" data-side="${side}"${attr('aria-current', active && 'page')} class="ds-fan-item flex items-center whitespace-nowrap px-3 ds-caption bg-panel ${active ? 'font-bold text-pitch' : 'text-chalk'}">${item.label}</a>`;
-      })}
-    </nav>
+    <div class="ds-sheet-panel fixed inset-x-0 bottom-0 max-h-[80dvh] overflow-y-auto border-t border-line/40 bg-panel px-3 pb-20 shadow-float">
+      <div data-sheet-grip="true" aria-hidden="true" class="flex h-8 items-center justify-center"><span class="h-1 w-10 bg-line"></span></div>
+      <nav aria-label="Categories">${rail}</nav>
+    </div>
   </details>`;
 }
 
@@ -194,13 +164,17 @@ export default function ExploreView({
     initialFilters.total,
     initialView,
   );
-  const fan = categoryFan(
-    initialFilters.categories,
-    initialCategory,
-    initialFilters.total,
-    initialView,
+  // The mobile sheet's button names where the reader is, with its count; a hub
+  // with no rows is still named, at zero when counts are known.
+  const currentCount = initialCategory
+    ? (initialFilters.categories.find((option) => option.value === initialCategory)?.count ??
+      (initialFilters.total === null ? null : 0))
+    : (initialFilters.total ?? null);
+  const sheet = categorySheet(
+    rail,
+    initialCategory ? (CATEGORIES[initialCategory]?.label ?? initialCategory) : GLOBAL_FEED_LABEL,
+    currentCount,
   );
-
   const cards =
     initialView === 'list'
       ? html`<ol data-board="true" data-view="list" data-category="${initialCategory}" class="divide-y divide-line/30 border-b border-line/30" aria-label="Explore links">
@@ -238,7 +212,7 @@ export default function ExploreView({
 
   // Desktop: the rail is h-screen and scrolls on its own, with the controls
   // pinned at its foot. Mobile: the controls are a sticky top bar, and the
-  // categories are the fan in the bottom-left corner.
+  // categories are the bottom sheet behind the button at the bottom centre.
   //
   // `#explore-results` is the skip link's target. It has to exist in every
   // state, including the empty and unavailable ones, so it lives on this
@@ -274,6 +248,6 @@ export default function ExploreView({
         }
       </div>
     </div>
-    ${fan}
+    ${sheet}
   </div>`;
 }
