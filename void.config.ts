@@ -38,7 +38,7 @@ export default defineConfig({
         database_id: '3d229c09-2965-4dbd-a17d-b4e43b15c86d',
         // `void deploy` applies pending migrations from here, after saving a
         // D1 Time Travel restore point.
-        migrations_dir: 'migrations',
+        migrations_dir: './db/migrations',
       },
     ],
 
