@@ -94,7 +94,7 @@ describe('binding declarations', () => {
     // Guards the parsers themselves: a regex that matched nothing would make
     // every assertion below vacuously true, which is how a pin like this rots.
     expect([...toml].sort()).toEqual(['ASSETS', 'CACHE', 'DB']);
-    expect(vars.map((entry) => entry.key)).toEqual(['LLM_BASE_URL', 'LLM_MODEL']);
+    expect(vars.map((entry) => entry.key)).toEqual([]);
     expect(appBindings.length).toBeGreaterThan(0);
     expect(workerBindings.length).toBeGreaterThan(0);
   });
@@ -124,12 +124,10 @@ describe('binding declarations', () => {
     expect(declaredVarLiterals('worker/env.d.ts')).toEqual(expected);
   });
 
-  it('keeps the secret out of the config and optional in both halves', () => {
-    // LLM_API_KEY must never reach wrangler.toml (it is set with
-    // `wrangler secret put`), and it must be optional: a local run without
-    // .dev.vars has to degrade to an uncurated desk, not fail to boot.
-    expect(appSecrets).toEqual(['LLM_API_KEY']);
-    expect(workerSecrets).toEqual(['LLM_API_KEY']);
-    expect(read('wrangler.toml')).not.toMatch(/^\s*LLM_API_KEY\s*=/m);
+  it('declares no secrets', () => {
+    // The curator's LLM_API_KEY left with the curator; a stale optional member
+    // would typecheck while nothing set it.
+    expect(appSecrets).toEqual([]);
+    expect(workerSecrets).toEqual([]);
   });
 });

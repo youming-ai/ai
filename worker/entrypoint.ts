@@ -2,7 +2,6 @@
 
 import { handle } from '@astrojs/cloudflare/handler';
 import type { Env } from '../src/data/api';
-import { curatePending } from '../src/feeds/curate';
 import { ingestAllSources } from '../src/feeds/ingest';
 import { PRUNE_CRON, pruneOldRecords } from '../src/feeds/retention';
 import { mediaRequest } from '../src/media';
@@ -35,11 +34,8 @@ const entrypoint: ExportedHandler<Env> = {
 
 /** Keep a log line readable when a whole vocabulary is unmapped.
  *
- *  The desk's own sources each publish their own categories — the first real
- *  tick measured 179/179 rows unregistered across 60+ distinct values ('gpus',
- *  'ai/ml/dl', 'nanosheets'…). The count is the signal; the names are only
- *  interesting at the head, and an unbounded list buries every other log line
- *  from the same tick. */
+ *  The count is the signal; the names are only interesting at the head, and an
+ *  unbounded list buries every other log line from the same tick. */
 function nameList(values: string[], limit = 8): string {
   if (values.length <= limit) return values.join(', ');
   return `${values.slice(0, limit).join(', ')} … (${values.length - limit} more)`;
@@ -75,32 +71,12 @@ async function runScheduled(
     );
   }
   if (report.uncategorized > 0) {
-    // Info level now that the curator assigns the stored category from the story
-    // text: a publisher category outside the registry is a taxonomy hint we
-    // ignore, not a hole in the board. Kept because the values are still the
-    // only early signal that an upstream feed changed shape.
+    // A Poche category outside the registry reaches the global board but no
+    // hub; the names say which registry entry is missing.
     console.log(
       `[scheduled] ${report.uncategorized}/${report.fetched} stored rows carried an unregistered publisher category:`,
       nameList(report.unmappedCategories),
     );
-  }
-
-  // Curation runs after ingestion in the same tick so a new story reaches a hub
-  // within one cron interval. Its failures are its own: a model outage leaves
-  // the rows published-but-uncurated (the queue the health check reports) and
-  // must not fail the tick that just collected them.
-  const curation = await curatePending(env);
-  if (!curation.configured) {
-    console.warn(
-      '[scheduled] LLM_API_KEY/LLM_BASE_URL/LLM_MODEL not configured: stored rows stay uncurated',
-    );
-  } else if (curation.selected > 0) {
-    console.log(
-      `[scheduled] curated ${curation.curated}, filtered ${curation.filtered}, skipped ${curation.skipped}, failed ${curation.failed} of ${curation.selected} selected`,
-    );
-  }
-  if (curation.failed > 0) {
-    console.error(`[scheduled] curator failed on ${curation.failed} stories`);
   }
 }
 

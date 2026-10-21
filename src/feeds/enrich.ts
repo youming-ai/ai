@@ -1,6 +1,6 @@
 import { CATEGORIES } from '../categories';
 import type { Env } from '../data/api';
-import type { ArticleEnrichment, RawArticle } from './types';
+import type { RawArticle } from './types';
 
 export function canonicalCategory(value: string | null): string | null {
   if (!value) return null;
@@ -37,9 +37,8 @@ export async function storeArticle(env: Env, article: RawArticle): Promise<boole
   // ponytail: summary and blurb duplicate description to populate legacy D1 columns (ai_summary/ai_blurb)
   const summary = article.description || article.title;
   const blurb = summary;
-  // Uncurated rows score 0 until the curator writes a real one. The board sorts
-  // by score within a day, and seeding the source's authority (75–90) ranked
-  // every unjudged story above the curated ones (55–72 on a measured tick).
+  // Poche is already curated upstream and carries no score, so every row ties
+  // and the board orders a day by publish time.
   const qualityScore = 0;
 
   const result = await env.DB.prepare(
@@ -75,88 +74,4 @@ export async function storeArticle(env: Env, article: RawArticle): Promise<boole
     )
     .run();
   return (result.meta?.changes ?? 0) > 0;
-}
-
-/** Apply one validated curation result to a stored row.
- *
- *  This is the only place `ai_summary`, `ai_blurb`, `quality_score`,
- *  `article_type`, `category` and `is_on_topic` are set from a model, and the
- *  only place `article_tags` rows are written at all.
- *
- *  Two decisions worth keeping:
- *
- *  - `status = 'filtered'` is how an off-beat story leaves the board. The row
- *    stays: deleting it would drop the `fingerprint`/`canonical_url` dedupe
- *    guards and the next tick would ingest the same story again. Every read path
- *    already filters on `status = 'published'`.
- *  - Tags are *replaced*, and a tag identical to the assigned category is
- *    dropped before the write. Mirroring the category into `article_tags` is the
- *    exact defect migration 0012 had to purge — cards rendered
- *    "Development · development" and the RSS emitted the term as both a category
- *    and a tag. The guard lives here so a caller cannot reintroduce it. */
-export async function applyEnrichment(
-  env: Env,
-  articleId: string,
-  enrichment: ArticleEnrichment,
-  outcome: D1PreparedStatement,
-): Promise<void> {
-  const category = canonicalCategory(enrichment.category);
-  const categoryName = category ? CATEGORIES[category]?.label.toLowerCase() : null;
-  const tags = [
-    ...new Set(
-      enrichment.tags
-        .map((tag) => tag.trim().toLowerCase())
-        .filter((tag) => tag.length > 0 && tag !== category && tag !== categoryName),
-    ),
-  ].slice(0, 8);
-  const now = Date.now();
-  await env.DB.batch([
-    env.DB.prepare(
-      `UPDATE articles SET
-         ai_summary = ?, ai_blurb = ?, quality_score = ?, category = ?, article_type = ?,
-         is_on_topic = ?, status = ?, enriched_at = ?, updated_at = ?
-       WHERE id = ?`,
-    ).bind(
-      enrichment.summary,
-      enrichment.blurb,
-      enrichment.qualityScore,
-      category,
-      enrichment.articleType,
-      enrichment.isOnTopic ? 1 : 0,
-      enrichment.isOnTopic ? 'published' : 'filtered',
-      now,
-      now,
-      articleId,
-    ),
-    env.DB.prepare('DELETE FROM article_tags WHERE article_id = ?').bind(articleId),
-    ...tags.map((tag) =>
-      env.DB.prepare('INSERT OR IGNORE INTO article_tags (article_id, tag) VALUES (?, ?)').bind(
-        articleId,
-        tag,
-      ),
-    ),
-    // D1 batches roll back the whole sequence if any statement fails, including
-    // this outcome: a story cannot leave the queue without its audit record.
-    outcome,
-  ]);
-}
-
-/** Take a story out of the curation queue without judging it: too little text
- *  for the model to work with. `enriched_at` is still set, otherwise the story
- *  would be re-selected every tick and counted as pending forever; it keeps the
- *  deck `storeArticle` wrote from the feed teaser. */
-export async function markCurationSkipped(
-  env: Env,
-  articleId: string,
-  outcome: D1PreparedStatement,
-): Promise<void> {
-  const now = Date.now();
-  await env.DB.batch([
-    env.DB.prepare('UPDATE articles SET enriched_at = ?, updated_at = ? WHERE id = ?').bind(
-      now,
-      now,
-      articleId,
-    ),
-    outcome,
-  ]);
 }

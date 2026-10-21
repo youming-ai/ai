@@ -9,17 +9,11 @@
 // generated chain does not supply it inside this program. That is the same
 // reason the whole file exists rather than relying on worker-configuration.d.ts.
 //
-// The `[vars]` are restated with the literal types `wrangler types` emits, for
-// the same reason as the root file: a `string` here conflicts with the generated
-// chain, and the error lands at `handle(request, env, ctx)` instead of at the
-// declaration. LLM_API_KEY is the secret wrangler cannot generate.
+// Any future `[vars]` follow the root file's rule: restate the literal type.
 declare namespace Cloudflare {
   interface Env {
     CACHE: KVNamespace;
     DB: D1Database;
     ASSETS: Fetcher;
-    LLM_BASE_URL: 'https://api.b.ai/v1';
-    LLM_MODEL: 'mimo-v2.6-flash';
-    LLM_API_KEY?: string;
   }
 }
