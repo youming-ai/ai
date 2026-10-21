@@ -210,13 +210,14 @@ describe('board appends the next page', () => {
         expect(container.querySelector('[data-board]')?.textContent).toContain('last story');
       });
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(board.firstElementChild).toBe(firstPage);
-      // Existing pages retain their own column formatting context. New pages
-      // must be siblings, so appending cannot rebalance the original page.
       if (view === 'grid') {
-        expect(board.querySelectorAll(':scope > [data-board-page]')).toHaveLength(3);
-        expect(Array.from(firstPage.children)).toEqual(originalCards);
+        // The painted cards moved into the lanes as the same nodes, so nothing
+        // re-rendered, and every card is on the board exactly once.
+        expect(board.querySelectorAll(':scope > [data-board-lanes]')).toHaveLength(1);
+        expect(board.querySelectorAll('article')).toHaveLength(3);
+        expect(board.contains(originalCards[0]!)).toBe(true);
       } else {
+        expect(board.firstElementChild).toBe(firstPage);
         expect(board.querySelectorAll(':scope > li')).toHaveLength(3);
       }
       expect(container.querySelector('[data-board-more]')).toBeNull();
@@ -471,6 +472,77 @@ describe('board appends the next page', () => {
     expect(container.querySelector('[data-board-more]')).toBeNull();
     expect(container.textContent).toContain('End of the feed');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('masonry lanes', () => {
+  it('keeps painted cards in their column and fills the shortest lane, so pages leave no gap', async () => {
+    // Two columns at this width.
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((media: string) => ({
+        matches: media === '(min-width: 48rem)',
+        addEventListener: vi.fn(),
+      })),
+    );
+    // jsdom has no layout: a card is 300px when its title says "tall", else
+    // 100px; a lane is the sum of its cards. Column is read from offsetLeft.
+    const height = (el: HTMLElement): number =>
+      el.tagName === 'ARTICLE'
+        ? el.textContent?.includes('tall')
+          ? 300
+          : 100
+        : Array.from(el.children).reduce((sum, child) => sum + height(child as HTMLElement), 0);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      return height(this);
+    });
+    // A card's column is wherever the CSS columns currently put it, so moving
+    // one card out rebalances the rest: once any card has left the page
+    // wrapper, the ones still inside report the left column. Reading positions
+    // lazily would then pile every card into lane one.
+    vi.spyOn(HTMLElement.prototype, 'offsetLeft', 'get').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const page = this.closest('[data-board-page]');
+      if (page && page.children.length < 3) return 0;
+      return this.textContent?.includes('right') ? 500 : 0;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            html: renderExploreCards([card('d', 'fourth'), card('e', 'fifth')], 'grid'),
+            nextCursor: null,
+          }),
+        ),
+      ),
+    );
+    const { container } = render(
+      ExploreView({
+        initialData: feed(
+          [card('a', 'tall one'), card('b', 'tall two'), card('c', 'right three')],
+          'cur-1',
+        ),
+        initialFilters: { categories: [] },
+      }),
+    );
+    await startBoard();
+    observers.at(-1)?.([{ isIntersecting: true }]);
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-board-lanes]')?.textContent).toContain('fifth');
+    });
+    const lanes = Array.from(container.querySelector('[data-board-lanes]')!.children).map((lane) =>
+      Array.from(lane.querySelectorAll('h2')).map((title) => title.textContent),
+    );
+    // Left lane is 600px after the two tall cards, so both new cards go right.
+    expect(lanes).toEqual([
+      ['tall one', 'tall two'],
+      ['right three', 'fourth', 'fifth'],
+    ]);
   });
 });
 

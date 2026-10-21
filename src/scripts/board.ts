@@ -11,6 +11,85 @@
 // still renders and the rail still navigates. Scrolling loads subsequent pages
 // when JavaScript is available.
 
+/** Column counts of the server's grid page (`ExploreGridPage`: md:columns-2,
+ *  xl:columns-3, 2xl:columns-4), widest first. */
+const LANE_BREAKPOINTS: [query: string, lanes: number][] = [
+  ['(min-width: 96rem)', 4],
+  ['(min-width: 80rem)', 3],
+  ['(min-width: 48rem)', 2],
+];
+
+function laneCount(): number {
+  return LANE_BREAKPOINTS.find(([query]) => window.matchMedia(query).matches)?.[1] ?? 1;
+}
+
+/** Masonry lanes for the grid view. The server renders each page as its own
+ *  CSS-columns block — right for the first paint and without JavaScript — but
+ *  stacked blocks leave a gap: page two starts below page one's tallest column.
+ *  So on the first append the cards move into one flex lane per column, each
+ *  keeping the column it was painted in (nothing visibly moves), and every
+ *  later card goes to the shortest lane. A breakpoint change re-deals them all
+ *  in feed order.
+ *
+ *  ponytail: lane heights read off-screen cards at their content-visibility
+ *  estimate (400px), so lanes can end a few hundred pixels uneven at the very
+ *  bottom; they never leave a gap between cards. */
+function createLanes(board: HTMLElement): { add(cards: HTMLElement[]): void } {
+  const cards: HTMLElement[] = [];
+  let lanes: HTMLElement[] = [];
+
+  function shortest(): HTMLElement {
+    return lanes.reduce((low, lane) => (lane.offsetHeight < low.offsetHeight ? lane : low));
+  }
+
+  function build(count: number): HTMLElement {
+    const row = document.createElement('div');
+    row.dataset.boardLanes = 'true';
+    row.className = 'flex items-start gap-3';
+    lanes = Array.from({ length: count }, () => {
+      const lane = document.createElement('div');
+      lane.className = 'min-w-0 flex-1';
+      row.appendChild(lane);
+      return lane;
+    });
+    return row;
+  }
+
+  function convert(): void {
+    const painted = Array.from(board.querySelectorAll<HTMLElement>('[data-board-page] > article'));
+    // Cards in one CSS column share an offsetLeft, so its rank is the column.
+    // Read every position before moving any card: each move rebalances the
+    // columns the remaining cards are still in.
+    const positions = painted.map((card) => card.offsetLeft);
+    const lefts = [...new Set(positions)].sort((a, b) => a - b);
+    const row = build(laneCount());
+    painted.forEach((card, index) => {
+      lanes[Math.min(lefts.indexOf(positions[index]!), lanes.length - 1)]!.appendChild(card);
+    });
+    board.replaceChildren(row);
+    cards.push(...painted);
+  }
+
+  function reflow(): void {
+    if (cards.length === 0) return;
+    const row = build(laneCount());
+    board.replaceChildren(row);
+    for (const card of cards) shortest().appendChild(card);
+  }
+
+  for (const [query] of LANE_BREAKPOINTS) {
+    window.matchMedia(query).addEventListener('change', reflow);
+  }
+
+  return {
+    add(added) {
+      if (cards.length === 0) convert();
+      for (const card of added) shortest().appendChild(card);
+      cards.push(...added);
+    },
+  };
+}
+
 /** Infinite scroll, driven by one sentinel. The server renders the page; this
  *  appends the next one's HTML rather than rendering anything itself, so the
  *  cards cannot drift from the server-rendered ones. */
@@ -35,6 +114,7 @@ function initAppend(board: HTMLElement): void {
   let retryTimer: number | undefined;
 
   if (!cursor) return;
+  const lanes = view === 'grid' ? createLanes(board) : null;
 
   async function load(): Promise<void> {
     if (busy || !cursor || stopped || retryTimer !== undefined) return;
@@ -53,12 +133,20 @@ function initAppend(board: HTMLElement): void {
       if (stopped) return;
 
       // Grid page wrappers and list rows both arrive as server-rendered HTML.
-      const existing = board.children.length;
-      board.insertAdjacentHTML('beforeend', page.html);
       // Wire only what arrived. The React version got this for free — every
       // appended card mounted its own effects — and forgetting it meant page 2
       // onwards had no broken-image handling or playing video previews.
-      wireMedia(Array.from(board.children).slice(existing));
+      if (lanes) {
+        const parsed = document.createElement('template');
+        parsed.innerHTML = page.html;
+        const cards = Array.from(parsed.content.querySelectorAll<HTMLElement>('article'));
+        lanes.add(cards);
+        wireMedia(cards);
+      } else {
+        const existing = board.children.length;
+        board.insertAdjacentHTML('beforeend', page.html);
+        wireMedia(Array.from(board.children).slice(existing));
+      }
       cursor = page.nextCursor ?? '';
       failures = 0;
       sentinel.dataset.cursor = cursor;
