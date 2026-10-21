@@ -5,7 +5,10 @@
 const c = (v) => `rgb(var(${v}) / <alpha-value>)`;
 
 export default {
-  content: ['./src/**/*.{astro,js,ts,jsx,tsx}'],
+  // Not the tests: they name classes in assertions and comments that no page
+  // uses, and each became shipped CSS (`.container` brought a media query per
+  // breakpoint). Tailwind 4 reads this glob as a source in its own right.
+  content: ['./src/**/*.{astro,js,ts,jsx,tsx}', '!./src/**/*.test.ts'],
   theme: {
     extend: {
       colors: {
