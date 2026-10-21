@@ -19,21 +19,16 @@ function article(
     id: string;
     title: string;
     description: string;
-    summary: string;
-    blurb: string;
     url: string;
     sourceDomain: string;
     publishedAt: number;
     category: string | null;
-    tags: string[];
   }>,
 ): ExploreFeed['items'][number] {
   return {
     id: 'id-1',
     title: 'Article title',
     description: '',
-    summary: '',
-    blurb: '',
     url: 'https://tomshardware.com/pc-components/article',
     imageUrl: '',
     isVideo: false,
@@ -42,9 +37,6 @@ function article(
     sourceDomain: 'tomshardware.com',
     publishedAt: 1735689600000, // 2025-01-01T00:00:00Z (a fixed instant so the test is stable)
     category: 'gpu',
-    tags: ['gpu'],
-    qualityScore: 80,
-    freshnessScore: 70,
     ...overrides,
   };
 }
@@ -72,7 +64,6 @@ describe('renderExploreRss', () => {
           article({
             id: 'stable-fingerprint',
             title: 'A new flagship GPU breaks cover',
-            summary: 'A new flagship GPU breaks cover.',
             sourceDomain: 'tomshardware.com',
           }),
         ],
@@ -89,20 +80,19 @@ describe('renderExploreRss', () => {
     );
     expect(xml).toContain('<category>category:gpu</category>');
     expect(xml).toContain('<category>source:tomshardware.com</category>');
-    expect(xml).toContain('<category>tag:gpu</category>');
     // No `type:` category: the pipeline writes article_type = 'link' for every
     // row, so the element was the same constant on every item in every feed.
     expect(xml).not.toContain('<category>type:');
   });
 
-  it('escapes XML special characters in title, blurb, and tag', () => {
+  it('escapes XML special characters in title, description, and category', () => {
     const xml = renderExploreRss(
       {
         items: [
           article({
             title: 'Nvidia "wins" <3> & forgets the rest',
-            summary: 'They said "lucky" & left.',
-            tags: ['quotes & brackets'],
+            description: 'They said "lucky" & left.',
+            sourceDomain: 'quotes&brackets.test',
           }),
         ],
         nextCursor: null,
@@ -111,13 +101,13 @@ describe('renderExploreRss', () => {
     );
     expect(xml).toContain('Nvidia &quot;wins&quot; &lt;3&gt; &amp; forgets the rest');
     expect(xml).toContain('They said &quot;lucky&quot; &amp; left.');
-    expect(xml).toContain('tag:quotes &amp; brackets');
+    expect(xml).toContain('source:quotes&amp;brackets.test');
     // The original characters must not survive into XML as raw bytes.
     expect(xml).not.toContain('"wins"');
     expect(xml).not.toContain('<3>');
   });
 
-  it('falls back through summary → blurb → description for the item description', () => {
+  it('uses the publisher description for the item description', () => {
     // The channel itself always has a <description>, so we scope the empty-
     // body assertion to the lone <item>'s content.
     const itemsOnly = (xml: string): string => {
@@ -126,15 +116,9 @@ describe('renderExploreRss', () => {
       return start >= 0 && end >= 0 ? xml.slice(start, end + '</item>'.length) : '';
     };
 
-    const fromBlurb = renderExploreRss(
-      { items: [article({ summary: '', blurb: 'from blurb' })], nextCursor: null },
-      GLOBAL_FEED_LABEL,
-    );
-    expect(itemsOnly(fromBlurb)).toContain('<description>from blurb</description>');
-
     const fromDescription = renderExploreRss(
       {
-        items: [article({ summary: '', blurb: '', description: 'publisher copy' })],
+        items: [article({ description: 'publisher copy' })],
         nextCursor: null,
       },
       GLOBAL_FEED_LABEL,
@@ -142,7 +126,7 @@ describe('renderExploreRss', () => {
     expect(itemsOnly(fromDescription)).toContain('<description>publisher copy</description>');
 
     const empty = renderExploreRss(
-      { items: [article({ summary: '', blurb: '', description: '' })], nextCursor: null },
+      { items: [article({ description: '' })], nextCursor: null },
       GLOBAL_FEED_LABEL,
     );
     expect(itemsOnly(empty)).not.toContain('<description>');

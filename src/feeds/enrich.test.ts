@@ -2,27 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { categoryLabel } from '../categories';
 import type { Env } from '../data/api';
-import { canonicalCategory, normalizeTitle, storeArticle } from './enrich';
+import { canonicalCategory, storeArticle } from './enrich';
 import type { RawArticle } from './types';
-
-describe('normalizeTitle', () => {
-  it('collides punctuation, casing and padding variants of the same headline', () => {
-    expect(normalizeTitle('RTX 5080 review!')).toBe('rtx5080review');
-    expect(normalizeTitle('RTX 5080 review')).toBe('rtx5080review');
-    expect(normalizeTitle('  RTX   5080  REVIEW  ')).toBe('rtx5080review');
-  });
-
-  it('preserves Unicode letters in mixed-language headlines', () => {
-    expect(normalizeTitle('AI 编程助手')).toBe('ai编程助手');
-    expect(normalizeTitle('AI 绘图工具')).toBe('ai绘图工具');
-    expect(normalizeTitle('AI 编程助手')).not.toBe(normalizeTitle('AI 绘图工具'));
-  });
-
-  it('never collapses a non-Latin headline to an empty dedup key', () => {
-    expect(normalizeTitle('机械键盘评测')).toBe('机械键盘评测');
-    expect(normalizeTitle('Обзор видеокарты')).toBe('обзорвидеокарты');
-  });
-});
 
 const ARTICLE: RawArticle = {
   sourceId: 'poche-explore',
@@ -55,14 +36,11 @@ function makeStoreEnv() {
 }
 
 describe('storeArticle', () => {
-  it('stores articles as published with a zero score', async () => {
+  it('stores the row with its registry category', async () => {
     const { env, bound } = makeStoreEnv();
     await storeArticle(env, ARTICLE);
     expect(bound[0][0]).toBe('fp-1'); // id
-    expect(bound[0][14]).toBe('design'); // category
-    expect(bound[0][15]).toBe('link'); // article_type
-    expect(bound[0][17]).toBe(0); // quality_score
-    expect(bound[0][18]).toBe('published'); // status
+    expect(bound[0][11]).toBe('design'); // category
   });
 
   it('writes no topic tag for the category', async () => {

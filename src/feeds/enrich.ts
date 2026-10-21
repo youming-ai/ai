@@ -13,12 +13,6 @@ export function canonicalCategory(value: string | null): string | null {
   return null;
 }
 
-/** Cross-source dedup key: lowercase Unicode letters/numbers, no punctuation. */
-export function normalizeTitle(value: string): string {
-  const normalized = value.toLowerCase().replace(/[^\p{L}\p{N}\p{M}]+/gu, '');
-  return normalized || value.toLowerCase();
-}
-
 /** Persist one article directly: the article row.
  *
  *  Deliberately writes no `article_tags` row. The Poche feed carries no topic
@@ -32,43 +26,29 @@ export function normalizeTitle(value: string): string {
  *  the caller has to know that to report what it stored. */
 export async function storeArticle(env: Env, article: RawArticle): Promise<boolean> {
   const now = Date.now();
-  const category = canonicalCategory(article.category);
-  const articleId = article.fingerprint;
-  // ponytail: summary and blurb duplicate description to populate legacy D1 columns (ai_summary/ai_blurb)
-  const summary = article.description || article.title;
-  const blurb = summary;
-  // Poche is already curated upstream and carries no score, so every row ties
-  // and the board orders a day by publish time.
-  const qualityScore = 0;
-
+  // ai_summary/ai_blurb are NOT NULL leftovers of the retired curator; nothing
+  // reads them. Every other unread column takes its schema default.
   const result = await env.DB.prepare(
     `INSERT INTO articles (
-           id, source_id, canonical_url, fingerprint, title, title_norm, description, ai_summary, ai_blurb,
-           image_url, image_width, image_height, published_at, fetched_at, category, article_type, is_on_topic,
-           quality_score, status, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           id, source_id, canonical_url, fingerprint, title, description, ai_summary, ai_blurb,
+           image_url, image_width, image_height, published_at, fetched_at, category,
+           status, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, '', '', ?, ?, ?, ?, ?, ?, 'published', ?, ?)
          ON CONFLICT DO NOTHING`,
   )
     .bind(
-      articleId,
+      article.fingerprint,
       article.sourceId,
       article.canonicalUrl,
       article.fingerprint,
       article.title,
-      normalizeTitle(article.title),
       article.description,
-      summary,
-      blurb,
       article.imageUrl,
       article.imageWidth,
       article.imageHeight,
       article.publishedAt,
       article.fetchedAt,
-      category,
-      'link',
-      1,
-      qualityScore,
-      'published',
+      canonicalCategory(article.category),
       now,
       now,
     )

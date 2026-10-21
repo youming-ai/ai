@@ -14,18 +14,12 @@ export interface ExploreRow {
   id: unknown;
   title: unknown;
   description: unknown;
-  ai_summary: unknown;
-  ai_blurb: unknown;
   canonical_url: unknown;
   image_url: unknown;
   image_width: unknown;
   image_height: unknown;
   published_at: unknown;
-  day_bucket: unknown;
   category: unknown;
-  quality_score: unknown;
-  freshness_score: unknown;
-  tags?: unknown;
 }
 
 /** A `GROUP BY` row from the counts query. */
@@ -45,37 +39,10 @@ function sourceDomain(value: unknown): string {
   }
 }
 
-function rowTags(value: unknown): string[] {
-  if (Array.isArray(value)) return value.filter((tag): tag is string => typeof tag === 'string');
-  if (typeof value !== 'string') return [];
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed)
-      ? parsed.filter((tag): tag is string => typeof tag === 'string')
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-/** Live freshness, computed at query time from published_at rather than the
- *  frozen insert-time snapshot the column used to hold. 259200 = 72h in
- *  seconds. Exported to API consumers; the current UI renders no freshness
- *  value, so this is a documented surface rather than a rendered one. */
-const LIVE_FRESHNESS =
-  "MAX(0, MIN(100, ROUND(100.0 - (CAST(strftime('%s','now') AS REAL) - a.published_at / 1000.0) / 259200.0 * 100.0))) AS freshness_score";
-
-/** Single source of truth for the article SELECT projection.
- *
- *  `article_type` is deliberately absent: the pipeline writes `'link'` for every
- *  row, so it was a constant that cost a column read on every query and a slot
- *  in every cached payload (and was rendered on every card as `LINK / X`). */
+/** Single source of truth for the article SELECT projection. */
 export const EXPLORE_ARTICLE_COLUMNS =
-  'a.id, a.title, a.description, a.ai_summary, a.ai_blurb, a.canonical_url, ' +
-  'a.image_url, a.image_width, a.image_height, ' +
-  'a.published_at, a.day_bucket, a.category, a.quality_score, ' +
-  `${LIVE_FRESHNESS}, ` +
-  "COALESCE((SELECT json_group_array(at.tag) FROM article_tags at WHERE at.article_id = a.id), '[]') AS tags";
+  'a.id, a.title, a.description, a.canonical_url, ' +
+  'a.image_url, a.image_width, a.image_height, a.published_at, a.category';
 
 /** Feed markup that reached storage before `parseRss` decoded escaped bodies.
  *  Only common body tags, so a literal like `<dialog>` in prose survives. */
@@ -97,8 +64,6 @@ export function exploreArticle(row: ExploreRow): ExploreArticle {
     id: rowString(row.id),
     title: rowString(row.title),
     description: feedText(row.description),
-    summary: feedText(row.ai_summary),
-    blurb: feedText(row.ai_blurb),
     url: rowString(row.canonical_url),
     // Upstream-hosted images are rewritten to /media so the feed's own CDN
     // origin never reaches markup, the payload, or og:image.
@@ -110,8 +75,5 @@ export function exploreArticle(row: ExploreRow): ExploreArticle {
     sourceDomain: sourceDomain(row.canonical_url),
     publishedAt: rowNumber(row.published_at),
     category: rowString(row.category) || null,
-    freshnessScore: rowNumber(row.freshness_score),
-    tags: rowTags(row.tags),
-    qualityScore: rowNumber(row.quality_score),
   };
 }

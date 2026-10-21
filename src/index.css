@@ -207,13 +207,8 @@
     @apply font-body text-body leading-body;
   }
 
-  /* Signature — the desk's signal strip. A meter across the top edge of a
-     story card, filled to the editorial quality score, so a grid of cards reads
-     as a bar chart of the desk's confidence. The track runs the full width on every
-     card so a low score reads as "low", not as a missing accent. The fill
-     color comes from `--signal-accent`: pitch, amber, or live based on quality
-     score thresholds. */
-  .ds-signal {
+  /* Story card. */
+  .ds-card {
     @apply relative;
     /* Off-screen cards skip layout and paint entirely until they scroll near.
        Measured on the perf harness at a fixed 130-card board, A/B on one build:
@@ -231,23 +226,6 @@
        out 4% short, which is scrollbar jitter). */
     content-visibility: auto;
     contain-intrinsic-size: auto 400px;
-  }
-  .ds-signal::before,
-  .ds-signal::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 2px;
-    z-index: 1;
-  }
-  .ds-signal::before {
-    right: 0;
-    background: rgb(var(--c-line));
-  }
-  .ds-signal::after {
-    width: var(--signal, 0%);
-    background: rgb(var(--signal-accent, var(--c-pitch)));
   }
 }
 

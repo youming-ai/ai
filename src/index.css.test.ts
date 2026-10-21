@@ -185,8 +185,8 @@ describe('design tokens', () => {
     // `contain-intrinsic-size` is half the fix: without a fallback near the real
     // card height the document comes out short and the scrollbar jitters as
     // cards render.
-    const rule = css.match(/\.ds-signal\s*\{[^}]*\}/)?.[0] ?? '';
-    expect(rule, '.ds-signal rule in index.css').not.toBe('');
+    const rule = css.match(/\.ds-card\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(rule, '.ds-card rule in index.css').not.toBe('');
     expect(rule).toContain('content-visibility: auto');
     expect(rule).toMatch(/contain-intrinsic-size:\s*auto\s+\d+px/);
   });

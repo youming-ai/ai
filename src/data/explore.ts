@@ -60,24 +60,19 @@ function normalizedExploreQuery(
 async function queryExplore(query: ExploreQuery, env: Env): Promise<ExploreFeed> {
   if (!env.DB) throw new Error('D1 binding is required');
   const normalized = normalizedExploreQuery(query);
-  const where = ["a.status = 'published'", 'a.is_on_topic = 1'];
+  const where = ["a.status = 'published'"];
   const bindings: unknown[] = [];
 
   if (normalized.category) {
     where.push('a.category = ?');
     bindings.push(normalized.category);
   }
-  // Strictly after the last row delivered, in the same (day, quality,
-  // published_at, id) order the query sorts by. Day bucket is immutable
-  // (floor(published_at / 86400000)), so the keyset stays stable.
-  //
-  // Expressed as one row-value comparison. The four-way OR this replaced was
-  // equivalent but not sargable: each branch wrapped day_bucket in an
-  // expression, so the planner could not turn the cursor into an index seek and
-  // re-sorted the whole partition on every page.
+  // Strictly after the last row delivered, in the order the query sorts by.
+  // One row-value comparison, so the planner can seek the feed index instead of
+  // re-sorting the partition on every page.
   const cursor = parseExploreCursor(normalized.cursor);
   if (cursor) {
-    where.push('(a.day_bucket, a.quality_score, a.published_at, a.id) < (?, ?, ?, ?)');
+    where.push('(a.published_at, a.id) < (?, ?)');
     bindings.push(...cursor);
   }
 
@@ -85,7 +80,7 @@ async function queryExplore(query: ExploreQuery, env: Env): Promise<ExploreFeed>
     `SELECT ${EXPLORE_ARTICLE_COLUMNS}
        FROM articles a
        WHERE ${where.join(' AND ')}
-       ORDER BY a.day_bucket DESC, a.quality_score DESC, a.published_at DESC, a.id DESC
+       ORDER BY a.published_at DESC, a.id DESC
        LIMIT ?`,
   ).bind(...bindings, normalized.limit + 1);
   const result = await statement.all<ExploreRow>();
@@ -129,7 +124,7 @@ async function loadExplore(
 
   // Deep pages bypass KV — `cursor` is user-controlled, so caching it lets an
   // unauthenticated caller write unlimited KV entries. Re-serialising the cursor
-  // is not enough: the id is taken verbatim and the three numbers only have to
+  // is not enough: the id is taken verbatim and the timestamp only has to
   // be finite, so the key space is unbounded either way. Page one — nearly all
   // the traffic — still caches, and later pages of an infinite scroll rarely hit
   // a warm entry.
@@ -155,8 +150,10 @@ async function loadExplore(
   // revalidated (and for the full `keep` window if D1 revalidation failed).
   // Bump this whenever the article payload changes:
   //   v2 dropped `sourceName`; v3 dropped `sourceId` and re-originated imageUrl;
-  //   v4 added `isVideo`; v5 dropped `articleType`.
-  const key = `explore:v5:${encodeURIComponent(JSON.stringify(normalized))}`;
+  //   v4 added `isVideo`; v5 dropped `articleType`; v6 dropped the curator's
+  //   summary/blurb/tags/qualityScore/freshnessScore and the cursor's two
+  //   leading keys.
+  const key = `explore:v6:${encodeURIComponent(JSON.stringify(normalized))}`;
   return runCached(
     key,
     async () => JSON.stringify(await queryExplore(normalized, env)),
@@ -213,8 +210,8 @@ export async function serveExploreRss(
   // expires. `v1` covers the URLs now being composed from SITE_ORIGIN rather
   // than the request host — an entry written by an earlier deploy through
   // another hostname would otherwise outlive the fix. `v2` drops the constant
-  // `type:` category.
-  const key = `explore:rss:v2:${encodeURIComponent(JSON.stringify(normalized))}`;
+  // `type:` category. `v3` drops the curator's tags and summary.
+  const key = `explore:rss:v3:${encodeURIComponent(JSON.stringify(normalized))}`;
   const cached = await runCached(
     key,
     async () => {
@@ -285,7 +282,7 @@ export async function getExploreFeed(
  *  identical copies of one payload — the parameter was never read here. */
 async function queryExploreFilters(env: Env): Promise<ExploreFilterSet> {
   if (!env.DB) throw new Error('D1 binding is required');
-  const published = "a.status = 'published' AND a.is_on_topic = 1";
+  const published = "a.status = 'published'";
   // NULL is deliberately included. It is not a hub, so it never becomes a rail
   // row, but its count belongs to the "All links" total: an unmapped publisher
   // category is stored as NULL and those stories do appear on the global board.

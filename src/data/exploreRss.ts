@@ -27,14 +27,7 @@ function categoriesFor(article: ExploreArticle): string[] {
   const categories: string[] = [];
   if (article.category) categories.push(`category:${article.category}`);
   if (article.sourceDomain) categories.push(`source:${article.sourceDomain}`);
-  for (const tag of article.tags.slice(0, 8)) categories.push(`tag:${tag}`);
   return categories;
-}
-
-// Prefer the stored blurb, falling back to the publisher description. Both are
-// plain-text in D1, so XML-escaping is sufficient.
-function descriptionFor(article: ExploreArticle): string {
-  return article.summary || article.blurb || article.description || '';
 }
 
 function renderItem(article: ExploreArticle): string {
@@ -47,7 +40,8 @@ function renderItem(article: ExploreArticle): string {
     `      <guid isPermaLink="false">${escapeXml(article.id)}</guid>`,
     `      <pubDate>${rfc822(article.publishedAt)}</pubDate>`,
   ];
-  const description = descriptionFor(article);
+  // Plain text in D1, so XML-escaping is sufficient.
+  const description = article.description;
   if (description) parts.push(`      <description>${escapeXml(description)}</description>`);
   // <author> is specified as an email address; the publisher's domain is all
   // we can honestly put in it.
