@@ -14,8 +14,7 @@ export default defineConfig({
     name: 'ai',
     compatibility_date: '2026-07-17',
     compatibility_flags: ['nodejs_compat'],
-    // Our own entry: it answers /media/<id> ahead of Astro and handles both
-    // cron schedules (told apart by controller.cron).
+    // Our own entry: it answers /media/<id> ahead of Astro.
     main: './worker/entrypoint.ts',
 
     // Where the Worker is reachable, as it was configured in the dashboard
@@ -53,10 +52,7 @@ export default defineConfig({
     // No Durable Objects on purpose: a pending DO migration cannot be staged
     // for a preview upload.
     //
-    // Two schedules, told apart by controller.cron in worker/entrypoint.ts:
-    // */15 ingests, 17 3 sweeps. The daily string is duplicated in PRUNE_CRON
-    // (src/feeds/retention.ts) because the Worker cannot read this file at
-    // runtime; retention.cron.test.ts asserts the two stay identical.
-    triggers: { crons: ['*/15 * * * *', '17 3 * * *'] },
+    // No `triggers` either: Void ignores them and installs cron schedules only
+    // from the job files in crons/ (see crons/desk.ts).
   },
 });

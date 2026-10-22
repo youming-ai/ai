@@ -1,5 +1,5 @@
 {
   "extends": "astro/tsconfigs/strict",
-  "include": ["src", "env.d.ts", "worker", "worker-configuration.d.ts", "scripts"],
+  "include": ["src", "env.d.ts", "worker", "crons", "worker-configuration.d.ts", "scripts"],
   "exclude": ["dist"]
 }
