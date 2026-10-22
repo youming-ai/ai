@@ -17,20 +17,15 @@ export default defineConfig({
     // Our own entry: it answers /media/<id> ahead of Astro.
     main: './worker/entrypoint.ts',
 
-    // Where the Worker is reachable, as it was configured in the dashboard
-    // before Void deployed it. Void republishes these on every deploy and
-    // refuses to deploy over dashboard-managed values it cannot see, so they
-    // must stay explicit here.
+    // Reachable only at its own domain: no workers.dev name and no per-version
+    // preview URLs, which would be further public origins over the production
+    // D1 and KV. Void republishes these on every deploy, so they stay explicit.
     routes: [{ pattern: 'ai.um1ng.me', custom_domain: true }],
-    workers_dev: true,
-    preview_urls: true,
+    workers_dev: false,
+    preview_urls: false,
 
-    observability: {
-      enabled: true,
-      head_sampling_rate: 1,
-      logs: { enabled: true, head_sampling_rate: 1, persist: true, invocation_logs: true },
-      traces: { enabled: true, persist: true, head_sampling_rate: 1 },
-    },
+    // Logs and traces, fully sampled and persisted (the defaults under enabled).
+    observability: { enabled: true, traces: { enabled: true } },
 
     assets: { directory: './dist', binding: 'ASSETS' },
 
