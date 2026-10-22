@@ -70,15 +70,9 @@ const canonicalUrl = `${SITE_ORIGIN}${canonicalPath}`;
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={socialImage} />
     {socialImageAlt && <meta name="twitter:image:alt" content={socialImageAlt} />}
-    <!-- Fonts are self-hosted now (see the @font-face block in index.css):
-         two latin-subset variable files served from this origin, so there is
-         no third-party stylesheet on the critical path and no preconnect to a
-         host the reader would otherwise never contact. Archivo carries the desk
-         headlines and Inter keeps prose readable; labels and source metadata
-         use the platform's own monospace.
-         Deliberately NOT preloaded: measuring with and without showed the
-         preloads put ~83KB on the critical path and cost ~180ms of FCP, while
-         `font-display: swap` already paints text immediately in the fallback. -->
+    <!-- Font subsets are self-hosted through index.css: Oswald for
+         headlines, Inter for summaries, IBM Plex Mono for labels and dates.
+         font-display: swap keeps text visible while the files load. -->
     <!-- TODO(template): add your analytics (e.g. Clarity/Plausible) here -->
     <!-- Read the stored theme before first paint so the first frame already
         carries the right chrome; keep meta theme-color in sync with --c-bg so

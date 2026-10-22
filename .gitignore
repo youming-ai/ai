@@ -125,3 +125,4 @@ dist-ssr/
 # void.lock.json are the committed sources).
 .void-wrangler.jsonc
 .void/
+src/middleware.ts

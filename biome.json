@@ -11,7 +11,9 @@
       "!**/worker-configuration.d.ts",
       "!**/void.lock.json",
       "!**/.void",
-      "!**/*.css"
+      "!**/.void-wrangler.jsonc",
+      "!**/*.css",
+      "!src/middleware.ts"
     ]
   },
   "formatter": {
@@ -54,5 +56,10 @@
         }
       }
     }
-  ]
+  ],
+  "markdown": {
+    "formatter": {
+      "enabled": false
+    }
+  }
 }

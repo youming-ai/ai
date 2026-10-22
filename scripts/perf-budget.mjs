@@ -17,9 +17,10 @@
 // Gzip, because that is what crosses the wire.
 //
 // Run: node scripts/perf-budget.mjs   (wired into `bun run build`)
-import { gzipSync } from 'node:zlib';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, posix, relative } from 'node:path';
+import { gzipSync } from 'node:zlib';
 
 const CLIENT_DIR = 'dist/client';
 
@@ -53,8 +54,8 @@ const BUDGETS = [
   {
     key: 'font payload',
     match: (rel) => rel.endsWith('.woff2'),
-    limit: 90_000,
-    why: 'Two latin-subset variable faces (Archivo, Inter); labels use the system monospace. A third family or a non-variable weight shows up here.',
+    limit: 92_000,
+    why: 'Latin subsets: Oswald titles, Inter summaries, and IBM Plex Mono labels (regular/bold).',
   },
 ];
 

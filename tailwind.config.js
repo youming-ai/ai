@@ -1,84 +1,82 @@
-/** @type {import('tailwindcss').Config} */
+import plugin from 'tailwindcss/plugin';
+import tokens from './design-tokens/tokens.json' with { type: 'json' };
 
-// Colors use CSS variable channels ("R G B") so alpha modifiers work:
-// bg-panel/85, border-overlay/10, etc.
-const c = (v) => `rgb(var(${v}) / <alpha-value>)`;
+// The names used by existing markup stay stable; values live only in tokens.json.
+const colorNames = {
+  night: 'bg',
+  panel: 'surface',
+  line: 'line',
+  chalk: 'text',
+  chalkdim: 'muted',
+  pitch: 'pitch',
+  live: 'live',
+  overlay: 'overlay',
+};
+const map = (group, value) =>
+  Object.fromEntries(Object.entries(group).map(([name, token]) => [name, value(name, token)]));
+const variables = (group, prefix) => map(group, (name) => `var(--${prefix}-${name})`);
+const sizes = Object.fromEntries(
+  Object.entries(tokens.typography).filter(([, token]) => token.$type === 'dimension'),
+);
+const fonts = Object.fromEntries(
+  Object.entries(tokens.typography)
+    .filter(([, token]) => token.$type === 'fontFamily')
+    .map(([name, token]) => [name.replace('font-', ''), token.$value]),
+);
 
 export default {
-  // Not the tests: they name classes in assertions and comments that no page
-  // uses, and each became shipped CSS (`.container` brought a media query per
-  // breakpoint). Tailwind 4 reads this glob as a source in its own right.
+  // Tests name classes in assertions that should never become shipped CSS.
   content: ['./src/**/*.{astro,js,ts,jsx,tsx}', '!./src/**/*.test.ts'],
   theme: {
     extend: {
-      colors: {
-        night: c('--c-bg'),
-        panel: c('--c-surface'),
-        panel2: c('--c-surface2'),
-        line: c('--c-line'),
-        chalk: c('--c-text'),
-        chalkdim: c('--c-muted'),
-        pitch: c('--c-pitch'),
-        live: c('--c-live'),
-        amber: c('--c-amber'),
-        overlay: c('--c-overlay'),
-      },
-      borderRadius: {
-        micro: 'var(--r-micro)',
-        'card-inset': 'var(--r-card-inset)',
-        card: 'var(--r-card)',
-        control: 'var(--r-control)',
-        panel: 'var(--r-panel)',
-        hero: 'var(--r-hero)',
-        pill: 'var(--r-pill)',
-      },
-      spacing: {
-        'page-x': 'var(--space-page-x)',
-        'page-x-md': 'var(--space-page-x-md)',
-        'page-y': 'var(--space-page-y)',
-        'page-y-md': 'var(--space-page-y-md)',
-        section: 'var(--space-section)',
-        stack: 'var(--space-stack)',
-        card: 'var(--space-card)',
-        'card-inner': 'var(--space-card-inner)',
-      },
-      fontSize: {
-        micro: ['var(--text-micro)', { lineHeight: 'var(--leading-caption)' }],
-        caption: ['var(--text-caption)', { lineHeight: 'var(--leading-caption)' }],
-        label: ['var(--text-label)', { lineHeight: 'var(--leading-label)' }],
-        body: ['var(--text-body)', { lineHeight: 'var(--leading-body)' }],
-        lead: ['var(--text-lead)', { lineHeight: 'var(--leading-lead)' }],
-        hero: ['var(--text-hero)', { lineHeight: 'var(--leading-hero)' }],
-      },
-      lineHeight: {
-        caption: 'var(--leading-caption)',
-        label: 'var(--leading-label)',
-        body: 'var(--leading-body)',
-        lead: 'var(--leading-lead)',
-        hero: 'var(--leading-hero)',
-      },
-      // Letter-spacing scale — one home for the broadcast-label tracking that
-      // used to be hand-rolled per component (tracking-[0.15em] etc).
-      letterSpacing: {
-        display: '0.08em', // wordmark / display headings
-        data: '0.12em', // card source rows, stat labels
-        caption: '0.16em', // eyebrow / section captions
-      },
-      boxShadow: {
-        panel: 'var(--shadow-panel)',
-        hero: 'var(--shadow-hero)',
-        float: 'var(--shadow-float)',
-      },
-      transitionTimingFunction: {
-        // Strong ease-out for UI motion; mirrors --ease-out in index.css.
-        out: 'var(--ease-out)',
-      },
-      fontFamily: {
-        display: ['Archivo', 'system-ui', 'sans-serif'],
-        body: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
-      },
+      colors: map(tokens.color, (name) => `rgb(var(--c-${colorNames[name]}) / <alpha-value>)`),
+      borderRadius: variables(tokens.radius, 'r'),
+      fontSize: map(sizes, (name) => [
+        `var(--text-${name})`,
+        { lineHeight: `var(--leading-${name === 'micro' ? 'caption' : name})` },
+      ]),
+      lineHeight: variables(tokens.leading, 'leading'),
+      letterSpacing: map(tokens.tracking, (_, token) => token.$value),
+      boxShadow: variables(tokens.shadow, 'shadow'),
+      transitionTimingFunction: variables(tokens.easing, 'ease'),
+      fontFamily: fonts,
     },
   },
-  plugins: [],
+  plugins: [
+    plugin(({ addBase }) => {
+      const themed = (theme) => ({
+        ...Object.fromEntries(
+          Object.entries(tokens.color).map(([name, token]) => [
+            `--c-${colorNames[name]}`,
+            token.$value[theme]
+              .slice(1)
+              .match(/../g)
+              .map((channel) => Number.parseInt(channel, 16))
+              .join(' '),
+          ]),
+        ),
+        ...Object.fromEntries(
+          Object.entries(tokens.shadow).map(([name, token]) => [
+            `--shadow-${name}`,
+            token.$value[theme],
+          ]),
+        ),
+        'color-scheme': theme,
+      });
+      const values = (group, prefix) =>
+        Object.fromEntries(
+          Object.entries(group).map(([name, token]) => [`--${prefix}-${name}`, token.$value]),
+        );
+      addBase({
+        ':root, [data-theme="dark"]': {
+          ...themed('dark'),
+          ...values(tokens.radius, 'r'),
+          ...values(sizes, 'text'),
+          ...values(tokens.leading, 'leading'),
+          ...values(tokens.easing, 'ease'),
+        },
+        '[data-theme="light"]': themed('light'),
+      });
+    }),
+  ],
 };
