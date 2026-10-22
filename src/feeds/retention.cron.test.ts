@@ -1,16 +1,16 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import config from '../../void.config';
+import { cron } from '../../crons/desk';
 import { PRUNE_CRON } from './retention';
 
-// A Worker cannot read its own config at runtime, so the daily cron string is
-// written twice: once as a trigger in void.config.ts and once as PRUNE_CRON,
+// The daily cron string is written twice: once as a schedule of the Void job
+// in crons/desk.ts and once as PRUNE_CRON,
 // which scheduled() compares controller.cron against. Nothing fails loudly if
 // they drift — the sweep just stops recognising itself and runs a second full
 // ingest instead. That is not hypothetical: the original duplicate "0 7 * * *"
 // trigger did exactly that for weeks, because scheduled() ignored the
 // controller entirely.
-const crons: string[] = config.cloudflare?.triggers?.crons ?? [];
+const crons: string[] = Array.isArray(cron) ? cron : [cron];
 
 describe('cron wiring', () => {
   it('declares exactly the two schedules the handler knows how to route', () => {

@@ -47,13 +47,7 @@
         "database_id": "3d229c09-2965-4dbd-a17d-b4e43b15c86d",
         "migrations_dir": "./db/migrations"
       }
-    ],
-    "triggers": {
-      "crons": [
-        "*/15 * * * *",
-        "17 3 * * *"
-      ]
-    }
+    ]
   },
   "resolved": {
     "name": "ai",
@@ -63,6 +57,14 @@
       "nodejs_als"
     ],
     "main": "./worker/entrypoint.ts",
+    "routes": [
+      {
+        "pattern": "ai.um1ng.me",
+        "custom_domain": true
+      }
+    ],
+    "workers_dev": true,
+    "preview_urls": true,
     "observability": {
       "enabled": true,
       "head_sampling_rate": 1,
@@ -96,21 +98,7 @@
         "migrations_dir": "./db/migrations"
       }
     ],
-    "triggers": {
-      "crons": [
-        "*/15 * * * *",
-        "17 3 * * *"
-      ]
-    },
-    "account_id": "adec54ff48f1c2618cf92f2279377392",
-    "routes": [
-      {
-        "pattern": "ai.um1ng.me",
-        "custom_domain": true
-      }
-    ],
-    "workers_dev": true,
-    "preview_urls": true
+    "account_id": "adec54ff48f1c2618cf92f2279377392"
   },
-  "text": "{\n  \"name\": \"ai\",\n  \"compatibility_date\": \"2026-07-17\",\n  \"compatibility_flags\": [\n    \"nodejs_compat\",\n    \"nodejs_als\"\n  ],\n  \"main\": \"./worker/entrypoint.ts\",\n  \"observability\": {\n    \"enabled\": true,\n    \"head_sampling_rate\": 1,\n    \"logs\": {\n      \"enabled\": true,\n      \"head_sampling_rate\": 1,\n      \"persist\": true,\n      \"invocation_logs\": true\n    },\n    \"traces\": {\n      \"enabled\": true,\n      \"persist\": true,\n      \"head_sampling_rate\": 1\n    }\n  },\n  \"assets\": {\n    \"directory\": \"./dist\",\n    \"binding\": \"ASSETS\"\n  },\n  \"kv_namespaces\": [\n    {\n      \"binding\": \"CACHE\",\n      \"id\": \"b5d6927aea7345efaddf56bcc2878e89\"\n    }\n  ],\n  \"d1_databases\": [\n    {\n      \"binding\": \"DB\",\n      \"database_name\": \"umuo-content\",\n      \"database_id\": \"3d229c09-2965-4dbd-a17d-b4e43b15c86d\",\n      \"migrations_dir\": \"./db/migrations\"\n    }\n  ],\n  \"triggers\": {\n    \"crons\": [\n      \"*/15 * * * *\",\n      \"17 3 * * *\"\n    ]\n  },\n  \"account_id\": \"adec54ff48f1c2618cf92f2279377392\",\n  \"routes\": [\n    {\n      \"pattern\": \"ai.um1ng.me\",\n      \"custom_domain\": true\n    }\n  ],\n  \"workers_dev\": true,\n  \"preview_urls\": true\n}\n"
+  "text": "{\n  \"name\": \"ai\",\n  \"compatibility_date\": \"2026-07-17\",\n  \"compatibility_flags\": [\n    \"nodejs_compat\",\n    \"nodejs_als\"\n  ],\n  \"main\": \"./worker/entrypoint.ts\",\n  \"routes\": [\n    {\n      \"pattern\": \"ai.um1ng.me\",\n      \"custom_domain\": true\n    }\n  ],\n  \"workers_dev\": true,\n  \"preview_urls\": true,\n  \"observability\": {\n    \"enabled\": true,\n    \"head_sampling_rate\": 1,\n    \"logs\": {\n      \"enabled\": true,\n      \"head_sampling_rate\": 1,\n      \"persist\": true,\n      \"invocation_logs\": true\n    },\n    \"traces\": {\n      \"enabled\": true,\n      \"persist\": true,\n      \"head_sampling_rate\": 1\n    }\n  },\n  \"assets\": {\n    \"directory\": \"./dist\",\n    \"binding\": \"ASSETS\"\n  },\n  \"kv_namespaces\": [\n    {\n      \"binding\": \"CACHE\",\n      \"id\": \"b5d6927aea7345efaddf56bcc2878e89\"\n    }\n  ],\n  \"d1_databases\": [\n    {\n      \"binding\": \"DB\",\n      \"database_name\": \"umuo-content\",\n      \"database_id\": \"3d229c09-2965-4dbd-a17d-b4e43b15c86d\",\n      \"migrations_dir\": \"./db/migrations\"\n    }\n  ],\n  \"account_id\": \"adec54ff48f1c2618cf92f2279377392\"\n}\n"
 }
