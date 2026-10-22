@@ -9,6 +9,8 @@
       "!**/.astro",
       "!**/bun.lock",
       "!**/worker-configuration.d.ts",
+      "!**/void.lock.json",
+      "!**/.void",
       "!**/*.css"
     ]
   },

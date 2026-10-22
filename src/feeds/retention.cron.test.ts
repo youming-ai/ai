@@ -1,23 +1,16 @@
 // @vitest-environment node
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import config from '../../void.config';
 import { PRUNE_CRON } from './retention';
 
-// A Worker cannot read wrangler.toml at runtime, so the daily cron string is
-// written twice: once as a trigger and once as PRUNE_CRON, which scheduled()
-// compares controller.cron against. Nothing fails loudly if they drift — the
-// sweep just stops recognising itself and runs a second full ingest instead.
-// That is not hypothetical: the original duplicate "0 7 * * *" trigger did
-// exactly that for weeks, because scheduled() ignored the controller entirely.
-
-// cwd-relative: vitest's jsdom environment mangles import.meta.url schemes.
-const raw = readFileSync(resolve(process.cwd(), 'wrangler.toml'), 'utf8');
-
-// wrangler.toml is TOML, not JSON; the only field we need is the crons array
-// in the [triggers] section. A regex is lighter than pulling in a TOML parser.
-const cronsMatch = raw.match(/^crons\s*=\s*(\[[^\]]+\])/m);
-const crons: string[] = cronsMatch ? (JSON.parse(cronsMatch[1]) as string[]) : [];
+// A Worker cannot read its own config at runtime, so the daily cron string is
+// written twice: once as a trigger in void.config.ts and once as PRUNE_CRON,
+// which scheduled() compares controller.cron against. Nothing fails loudly if
+// they drift — the sweep just stops recognising itself and runs a second full
+// ingest instead. That is not hypothetical: the original duplicate "0 7 * * *"
+// trigger did exactly that for weeks, because scheduled() ignored the
+// controller entirely.
+const crons: string[] = config.cloudflare?.triggers?.crons ?? [];
 
 describe('cron wiring', () => {
   it('declares exactly the two schedules the handler knows how to route', () => {

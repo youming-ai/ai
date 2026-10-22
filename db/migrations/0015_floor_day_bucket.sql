@@ -1,3 +1,5 @@
+-- void:allow-destructive
+-- Destructive by design; applied in production before Void deployed this Worker.
 -- 0014 introduced day_bucket as plain integer division, which is floor only for
 -- non-negative values: SQLite's `/` truncates toward zero, so a pre-1970 pubDate
 -- landed one bucket lower than the contract. That input is reachable —

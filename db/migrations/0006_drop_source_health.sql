@@ -1,3 +1,5 @@
+-- void:allow-destructive
+-- Destructive by design; applied in production before Void deployed this Worker.
 -- source_health is now fully dead: the last reader (getDeskStats, which summed
 -- articles_fetched_count for the home page desk strip) was removed along with
 -- the DeskStats banner. The table received writes every ingest tick and had

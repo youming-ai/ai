@@ -25,7 +25,7 @@ export const GLOBAL_FEED_LABEL = 'All links';
 /** Reported by /api/health so a deployed Worker can be identified without the
  *  dashboard. Duplicated from package.json, which a Worker cannot import —
  *  `index.css.test.ts` holds the two together, the way retention.cron.test.ts
- *  holds PRUNE_CRON to wrangler.toml. */
+ *  holds PRUNE_CRON to void.config.ts. */
 export const SITE_VERSION = '0.1.0';
 
 export const SITE_LOCALE = 'en_US';

@@ -25,7 +25,7 @@ import { getExploreFeed, getExploreFilters, getSitemapNews } from './api';
 // by its route, so this suite imports it the same way the route does.
 import { serveArticleRedirect } from './article';
 
-const MIGRATIONS_DIR = resolve(process.cwd(), 'migrations');
+const MIGRATIONS_DIR = resolve(process.cwd(), 'db/migrations');
 
 function migratedDatabase(): DatabaseSync {
   const db = new DatabaseSync(':memory:');

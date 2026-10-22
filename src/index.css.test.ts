@@ -128,7 +128,7 @@ describe('design tokens', () => {
   it('keeps the theme-color meta in sync with the dark --c-bg', () => {
     // Layout.astro is the one place --c-bg is copied as a literal: the browser
     // chrome color has to be in the markup before the stylesheet resolves.
-    // Pinned the way PRUNE_CRON is pinned to wrangler.toml, since the dark
+    // Pinned the way PRUNE_CRON is pinned to void.config.ts, since the dark
     // ground changing would otherwise silently leave the mobile chrome wrong.
     const layout = readFileSync(resolve(process.cwd(), 'src/layouts/Layout.astro'), 'utf8');
     const meta = layout.match(/name="theme-color"\s+content="rgb\(([^)]+)\)"/);
@@ -318,7 +318,7 @@ describe('the reported version', () => {
   it('matches the one in package.json', () => {
     // /api/health reports a version a Worker cannot import — package.json is not
     // in its bundle — so the constant is duplicated, and pinned here the way
-    // retention.cron.test.ts pins PRUNE_CRON to wrangler.toml.
+    // retention.cron.test.ts pins PRUNE_CRON to void.config.ts.
     const pkg = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
       version?: string;
     };

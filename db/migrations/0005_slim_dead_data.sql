@@ -1,3 +1,5 @@
+-- void:allow-destructive
+-- Destructive by design; applied in production before Void deployed this Worker.
 -- Drop dead data: tables/columns that are written every tick but never read
 -- back by any query, UI, or worker endpoint. See the audit in the flow review.
 

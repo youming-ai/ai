@@ -120,3 +120,8 @@ dist-ssr/
 
 # ZCode tooling
 .zcode/
+
+# Void: generated Cloudflare config and codegen (void.config.ts and
+# void.lock.json are the committed sources).
+.void-wrangler.jsonc
+.void/

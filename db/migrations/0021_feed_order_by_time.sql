@@ -1,3 +1,5 @@
+-- void:allow-destructive
+-- Destructive by design; applied in production before Void deployed this Worker.
 -- The feed orders by (published_at, id) alone now that nothing writes a
 -- quality score or an off-topic flag, so the seek indexes lose those columns.
 -- The curator's queue index and the cross-source title index have no reader.
