@@ -6,7 +6,7 @@ Built with Astro, Cloudflare Workers, D1 and KV.
 
 ## Development
 
-Requires Bun ≥ 1.4.2.
+Requires Bun ≥ 1.4.2 and Node.js ≥ 22.23.4.
 
 ```sh
 bun install

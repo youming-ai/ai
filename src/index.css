@@ -2,32 +2,18 @@
    would otherwise scan the whole repo, and design-tokens/tokens.json and the
    docs name utilities in prose (px-page-x, shadow-panel…) that no page uses. */
 @import 'tailwindcss' source('../src');
-/* The theme still lives in tailwind.config.js: the tokens test reads its font
-   families, and every colour there is a channel triplet from this file. */
+/* Generates theme variables and utilities from design-tokens/tokens.json. */
 @config '../tailwind.config.js';
 
-/* ── Self-hosted fonts ───────────────────────────────────────────────────────
-   Was three families / nine weights from fonts.googleapis.com, behind a
-   render-blocking <link> to a third-party origin. Measured at Slow-4G that
-   stylesheet cost 409ms of render-blocking time, plus DNS/TCP/TLS to a host we
-   otherwise never touch — on a site whose README promises no tracking.
-
-   Now the latin subset only, from our own origin, one *variable* file per
-   family (Google served byte-identical files for each requested weight, so
-   three files cover seven faces). The weight ranges are the ones the markup
-   asks for — note 700: `font-bold` was used on `font-display` while the old
-   link requested 600/800/900, so display type was never rendering the weight
-   it asked for.
-
-   Licences ship in public/fonts (Archivo and Inter, both OFL). The mono labels
-   use the platform's own monospace (SF Mono, Menlo, Consolas…): a third
-   self-hosted family cost 31KB on every first visit for small caption text. */
+/* Latin subsets, served from this origin. Keep the OFL licences in public/fonts.
+   Oswald carries titles, Inter the summaries, and IBM Plex Mono the
+   labels and dates. Swap lets fallback text paint while the fonts load. */
 @font-face {
-  font-family: 'Archivo';
+  font-family: 'Oswald';
   font-style: normal;
-  font-weight: 600 700;
+  font-weight: 400 700;
   font-display: swap;
-  src: url('./fonts/Archivo.woff2');
+  src: url('./fonts/Oswald.woff2') format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
@@ -38,105 +24,24 @@
   src: url('./fonts/Inter.woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
-/* ── Design tokens ───────────────────────────────────────────────────────────
-   Colors use "R G B" channels for rgb(var() / <alpha>) in Tailwind.
-   Semantic names map 1:1 to design-tokens/tokens.json and tailwind.config.js. */
-/* Motion — theme-invariant. Strong ease-out for UI (starts fast, feels
-   responsive). Mirrored into tailwind.config.js as the `ease-out` utility. */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/IBMPlexMono-400.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/IBMPlexMono-700.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 :root {
-  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-:root,
-[data-theme='dark'] {
-  /* Violet-ink ground with the brand violet as the signal. The neutrals keep
-     the lightness of the old green-ink set (so every contrast pair holds) with
-     the hue turned to the brand's. The accent is #5200ff mixed 1:1 with white:
-     #5200ff itself is ~2.6:1 on this ground, too dark for caption text. */
-  --c-bg: 12 12 18;
-  --c-surface: 31 30 42;
-  --c-surface2: 47 47 64;
-  --c-line: 57 57 80;
-  --c-text: 245 245 253;
-  --c-muted: 145 145 163;
-
-  --c-pitch: 169 128 255;
-  --c-live: 255 69 58;
-  --c-amber: 251 191 36;
-
-  /* Elevation overlays (replaces ad-hoc white/black alpha) */
-  --c-overlay: 255 255 255;
-
-  /* Radius — none. The whole UI is now square; revisit per-surface if a
-     single component ever wants to round again. */
-  --r-micro: 0;
-  --r-card-inset: 0;
-  --r-card: 0;
-  --r-control: 0;
-  --r-panel: 0;
-  --r-hero: 0;
-  --r-pill: 0;
-
-  /* Spacing — compact page rhythm */
-  --space-page-x: 0.75rem;
-  --space-page-x-md: 1rem;
-  --space-page-y: 0.75rem;
-  --space-page-y-md: 1rem;
-  --space-section: 0.75rem;
-  --space-stack: 0.5rem;
-  --space-card: 0.75rem;
-  --space-card-inner: 0.5rem;
-
-  /* A `--h-bar` (3rem) pinned the explore toolbar's height while the rail stuck
-     below it. The toolbar is gone — the rail is the page's only chrome, sticky
-     from the top and screen-tall — so nothing has an offset to compute. */
-
-  /* Typography — one scale, role-driven. caption/data stays tight;
-     body/lead breathe for readability. caption is not decoration: it carries
-     source name, article type, tags, dates and every rail filter row, so it
-     sits at 11px, not the 10px it used to be. micro follows at 10px. */
-  --text-micro: 0.625rem;
-  --text-caption: 0.6875rem;
-  --text-label: 0.75rem;
-  --text-body: 0.875rem;
-  --text-lead: 1.125rem;
-  --text-hero: 2rem;
-  --leading-caption: 1.25;
-  --leading-label: 1.33;
-  --leading-body: 1.5;
-  --leading-lead: 1.4;
-  --leading-hero: 1.2;
-
-  /* Elevation shadows */
-  --shadow-panel: 0 4px 6px -1px rgb(0 0 0 / 0.25), 0 2px 4px -2px rgb(0 0 0 / 0.2);
-  --shadow-hero: 0 10px 15px -3px rgb(0 0 0 / 0.3), 0 4px 6px -4px rgb(0 0 0 / 0.2);
-  --shadow-float: 0 20px 25px -5px rgb(0 0 0 / 0.35), 0 8px 10px -6px rgb(0 0 0 / 0.2);
-
-  /* Scrollbar — single source; header padding follows this gutter */
   --sb-w: 8px;
-
-  color-scheme: dark;
-}
-
-[data-theme='light'] {
-  --c-bg: 245 246 251;
-  --c-surface: 255 255 255;
-  --c-surface2: 235 235 245;
-  --c-line: 205 206 221;
-  --c-text: 21 20 32;
-  --c-muted: 98 99 120;
-
-  --c-pitch: 82 0 255; /* light: the brand #5200ff itself — 6.9:1 on page, 7.3:1 on cards, 5.2:1 on the 15% active rail-row fill */
-  --c-live: 198 43 38;
-  --c-amber: 156 100 0; /* light: darkened for AA on white (5.05:1); /25 badge ~3.7:1 */
-
-  --c-overlay: 0 0 0;
-
-  --shadow-panel: 0 2px 6px -1px rgb(0 0 0 / 0.1), 0 1px 3px -1px rgb(0 0 0 / 0.07);
-  --shadow-hero: 0 8px 12px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.08);
-  --shadow-float: 0 16px 20px -5px rgb(0 0 0 / 0.12), 0 8px 10px -6px rgb(0 0 0 / 0.08);
-
-  color-scheme: light;
 }
 
 @layer base {
