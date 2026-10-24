@@ -24,8 +24,12 @@ export default defineConfig({
     workers_dev: false,
     preview_urls: false,
 
-    // Logs and traces, fully sampled and persisted (the defaults under enabled).
-    observability: { enabled: true, traces: { enabled: true } },
+    // 自动 spans 包含 URL / KV key；查询串脱敏，Traces 只采样 1%。
+    observability: {
+      enabled: true,
+      redact_query_string: true,
+      traces: { enabled: true, head_sampling_rate: 0.01 },
+    },
 
     assets: { directory: './dist', binding: 'ASSETS' },
 
