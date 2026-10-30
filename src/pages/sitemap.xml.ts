@@ -5,7 +5,7 @@ import { renderSitemap, sitemapEntries } from '../sitemap';
 
 export const prerender = false;
 
-// Glue only. The paths + XML live in src/sitemap.ts (pure, testable); the D1
+// Glue only. The paths + XML live in src/sitemap.ts (pure, testable); the hub
 // lookup lives in src/data/api.ts behind the same KV cache.
 export const GET: APIRoute = async ({ locals }) => {
   const data = await getSitemapNews(env, locals.cfContext as ExecutionContext);

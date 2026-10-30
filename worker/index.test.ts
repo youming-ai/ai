@@ -6,34 +6,29 @@ import { type Env, json, serveExplore } from '../src/data/api';
 import { SITE_VERSION } from '../src/site';
 import worker from './index';
 
-const fetchMock = vi.fn();
+// The upstream is Poche's RSS, fetched when the KV snapshot is missing or
+// stale. One item, so a produced page is distinguishable from a stored one.
+const POCHE_RSS =
+  '<rss><channel><item><title>Fetched</title><link>https://example.com/a</link>' +
+  '<pubDate>Tue, 20 Oct 2026 10:00:00 GMT</pubDate></item></channel></rss>';
+const fetchMock = vi.fn(async () => new Response(POCHE_RSS));
 globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
+/** A stored snapshot holding no links: an empty board, but a readable one. */
+const EMPTY_SNAPSHOT = '[]';
+const EMPTY_PAGE = '{"items":[],"nextCursor":null}';
+
 function mockEnv(kvData?: { body: string; at: number } | null): Env {
-  // The explore cache key embeds the normalized query — tests don't need to
-  // reproduce it, so a stored copy is returned regardless of the key asked.
   return {
     CACHE: {
       get: vi.fn(async () => (kvData ? { ...kvData } : null)),
       put: vi.fn(async () => {}),
     },
-    DB: mockDb(),
   } as unknown as Env;
 }
 
-// D1 mock: prepare() returns an object with both bind() and all() (the
-// filters query calls all() without bind), `all` resolved to an empty result
-// set unless overridden. `first` serves single-row reads.
-function mockDb(overrides?: {
-  all?: ReturnType<typeof vi.fn>;
-  first?: ReturnType<typeof vi.fn>;
-}): Env['DB'] {
-  const all = overrides?.all ?? vi.fn().mockResolvedValue({ results: [] });
-  const first = overrides?.first ?? vi.fn().mockResolvedValue({ pending: 0 });
-  return {
-    prepare: vi.fn(() => ({ bind: vi.fn(() => ({ all, first })), all, first })),
-  } as unknown as Env['DB'];
-}
+const fetchedTitles = async (res: Response) =>
+  ((await res.json()) as { items: { title: string }[] }).items.map((item) => item.title);
 
 function mockCtx(): ExecutionContext {
   return {
@@ -72,15 +67,17 @@ describe('json helper', () => {
 describe('serveExplore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    fetchMock.mockImplementation(async () => new Response(POCHE_RSS));
   });
 
   it('returns HIT when stored body is fresh', async () => {
     const now = Date.now();
-    const env = mockEnv({ body: '{"items":[],"nextCursor":null}', at: now - 30_000 }); // fresh is 60s
+    const env = mockEnv({ body: EMPTY_SNAPSHOT, at: now - 30_000 }); // fresh is 10 min
     const res = await serveExplore({}, env, mockCtx());
     expect(res.status).toBe(200);
     expect(res.headers.get('x-cache')).toBe('HIT');
-    expect(await res.text()).toBe('{"items":[],"nextCursor":null}');
+    expect(await res.text()).toBe(EMPTY_PAGE);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('returns MISS on first query with no stored data', async () => {
@@ -88,7 +85,7 @@ describe('serveExplore', () => {
     const res = await serveExplore({}, env, mockCtx());
     expect(res.status).toBe(200);
     expect(res.headers.get('x-cache')).toBe('MISS');
-    expect(await res.text()).toBe('{"items":[],"nextCursor":null}');
+    expect(await fetchedTitles(res)).toEqual(['Fetched']);
   });
 
   it('treats a KV read failure as a miss and still serves (no 500)', async () => {
@@ -99,20 +96,18 @@ describe('serveExplore', () => {
     expect(res.headers.get('x-cache')).toBe('MISS');
   });
 
-  it('returns STALE when the DB query fails but a stored copy exists', async () => {
+  it('returns STALE when the upstream fails but a stored copy exists', async () => {
     const now = Date.now();
-    const env = mockEnv({ body: '{"items":[],"nextCursor":null}', at: now - 600_000 });
-    const failing = vi.fn().mockRejectedValueOnce(new Error('D1 down'));
-    env.DB = mockDb({ all: failing });
+    const env = mockEnv({ body: EMPTY_SNAPSHOT, at: now - 3_600_000 });
+    fetchMock.mockRejectedValueOnce(new Error('poche down'));
     const res = await serveExplore({}, env, mockCtx());
     expect(res.status).toBe(200);
     expect(res.headers.get('x-cache')).toBe('STALE');
   });
 
-  it('returns 502 when the DB query fails and no stored copy exists', async () => {
+  it('returns 502 when the upstream fails and no stored copy exists', async () => {
     const env = mockEnv(null);
-    const failing = vi.fn().mockRejectedValueOnce(new Error('D1 down'));
-    env.DB = mockDb({ all: failing });
+    fetchMock.mockRejectedValueOnce(new Error('poche down'));
     const res = await serveExplore({}, env, mockCtx());
     expect(res.status).toBe(502);
     expect(res.headers.get('x-cache')).toBe('MISS');
@@ -168,23 +163,22 @@ describe('serveExplore', () => {
     // `Promise<Response>`, the second caller reading `.text()` on the shared
     // body would throw `Body is unusable: Body has already been read`.
     const gate = Promise.withResolvers<void>();
-    const slowAll = vi.fn(async () => {
+    fetchMock.mockImplementation(async () => {
       await gate.promise;
-      return { results: [] };
+      return new Response(POCHE_RSS);
     });
     const env = mockEnv(null);
-    env.DB = mockDb({ all: slowAll });
 
     const N = 10;
     const responses = Array.from({ length: N }, () => serveExplore({}, env, mockCtx()));
     gate.resolve();
 
     const settled = await Promise.all(responses);
-    expect(slowAll).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(settled).toHaveLength(N);
 
-    const bodies = await Promise.all(settled.map((r) => r.text()));
-    expect(bodies.every((b) => b === '{"items":[],"nextCursor":null}')).toBe(true);
+    const titles = await Promise.all(settled.map(fetchedTitles));
+    expect(titles.every((t) => t[0] === 'Fetched')).toBe(true);
   });
 });
 
@@ -193,6 +187,7 @@ describe('serveExplore', () => {
 describe('fetch routing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    fetchMock.mockImplementation(async () => new Response(POCHE_RSS));
   });
 
   it('routes GET /api/explore through serveExplore', async () => {
@@ -214,7 +209,7 @@ describe('fetch routing', () => {
     expect(await res.json()).toEqual({
       status: 'ok',
       version: SITE_VERSION,
-      checks: { d1: 'ok', cache: 'present' },
+      checks: { feed: 'ok', cache: 'present' },
     });
   });
 
@@ -228,20 +223,18 @@ describe('fetch routing', () => {
     expect(res.status).toBe(405);
   });
 
-  it('answers 503 from /api/health when the D1 probe fails', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+  it('answers 503 from /api/health when the feed cannot be read', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    fetchMock.mockRejectedValueOnce(new Error('poche down'));
     const env = mockEnv(null);
-    env.DB = {
-      prepare: vi.fn(() => {
-        throw new Error('d1 down');
-      }),
-    } as unknown as Env['DB'];
 
     const res = await worker.fetch(new Request('https://x/api/health'), env, mockCtx());
 
     expect(res.status).toBe(503);
-    expect(((await res.json()) as { status: string }).status).toBe('degraded');
-    expect(logged).toHaveBeenCalledWith('[health] D1 probe failed:', expect.any(Error));
+    expect(await res.json()).toMatchObject({
+      status: 'degraded',
+      checks: { feed: 'error', cache: 'present' },
+    });
   });
 
   it('turns an escaping throw into a 500 rather than an unhandled rejection', async () => {
@@ -285,9 +278,9 @@ describe('fetch routing', () => {
       mockCtx(),
     );
     expect(res.status).toBe(200);
-    // `total` rides along: it counts the rows no hub holds, which the option
-    // list cannot express.
-    expect(await res.json()).toEqual({ categories: [], total: 0 });
+    // `total` rides along: it counts the links no hub holds, which the option
+    // list cannot express — here the one fetched link, which has no category.
+    expect(await res.json()).toEqual({ categories: [], total: 1 });
   });
 
   it('rejects non-GET on /api/explore/filters', async () => {

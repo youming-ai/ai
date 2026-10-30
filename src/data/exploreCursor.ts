@@ -1,14 +1,13 @@
-import { type ExploreRow, rowNumber, rowString } from './exploreArticle';
+import type { ExploreArticle } from '../types';
 
 // --- Keyset cursor codec (pure) ---
 
-/** Keyset cursor `<published_at>:<id>`, matching the feed's newest-first order.
- *  Both keys are immutable, so the keyset stays stable under the inserts every
- *  ingest tick makes at the top; an offset would slide. published_at may be
- *  negative (a pre-1970 pubDate is stored as-is), so only finiteness is checked.
- *  Ids are SHA-256 hex, so an id holding a colon is a pre-v6 four-part cursor
- *  from a page still open in someone's tab: it collapses to page one rather
- *  than being misread as a 1970 timestamp. */
+/** Keyset cursor `<publishedAt>:<id>`, matching the feed's newest-first order.
+ *  Both keys are immutable per link, so the keyset stays stable when the
+ *  snapshot refreshes between two pages; an offset would slide as new links
+ *  arrive at the top. publishedAt may be negative (a pre-1970 pubDate is kept
+ *  as-is), so only finiteness is checked. Ids are SHA-256 hex, so an id
+ *  holding a colon is a malformed cursor and collapses to page one. */
 export function parseExploreCursor(value: string | undefined): [number, string] | null {
   if (!value) return null;
   const colon = value.indexOf(':');
@@ -19,8 +18,8 @@ export function parseExploreCursor(value: string | undefined): [number, string] 
   return [publishedAt, id];
 }
 
-export function exploreCursorFor(row: ExploreRow): string {
-  return `${rowNumber(row.published_at)}:${rowString(row.id)}`;
+export function exploreCursorFor(article: Pick<ExploreArticle, 'publishedAt' | 'id'>): string {
+  return `${article.publishedAt}:${article.id}`;
 }
 
 export function canonicalCursor(value: string | undefined): string | undefined {

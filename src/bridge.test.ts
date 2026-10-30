@@ -19,7 +19,7 @@
 //
 // The same argument covers the other route modules, which is why they are here
 // rather than in a file per route: the modules they delegate to are tested
-// thoroughly (serveExploreRss, serveArticleRedirect), but nothing pinned that
+// thoroughly (serveExploreRss), but nothing pinned that
 // the wrappers pass them the right arguments. A wrapper that dropped `category`
 // would still answer 200 — with the global feed.
 //
@@ -28,30 +28,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SITE_ORIGIN } from './site';
 
-const { fakeEnv, kvGet, dbState } = vi.hoisted(() => {
-  const get = vi.fn(async () => null);
-  // Mutable per test: `.all()` rows for the feed queries, the `.first()` row for
-  // the legacy redirect's point lookup.
-  const state = { results: [] as unknown[], first: null as unknown };
+const { fakeEnv, kvGet, snapshot } = vi.hoisted(() => {
+  // Mutable per test: the links the KV snapshot holds, served as fresh. `null`
+  // is a cold cache, which sends the read to the (stubbed) upstream fetch.
+  const state = { articles: [] as unknown[] | null };
+  const get = vi.fn(async () =>
+    state.articles ? { body: JSON.stringify(state.articles), at: Date.now() } : null,
+  );
   return {
     kvGet: get,
-    dbState: state,
+    snapshot: state,
     fakeEnv: {
       CACHE: { get, put: vi.fn(async () => {}) },
-      DB: {
-        prepare: vi.fn(() => ({
-          bind: vi.fn(function bind(this: unknown) {
-            return this;
-          }),
-          all: vi.fn(async () => ({
-            results: state.results,
-            meta: { changes: 0 },
-            success: true,
-          })),
-          first: vi.fn(async () => state.first),
-          run: vi.fn(async () => ({ meta: { changes: 0 }, success: true })),
-        })),
-      },
       ASSETS: { fetch: vi.fn() },
     },
   };
@@ -76,8 +64,7 @@ function call(path: string): Promise<Response> {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  dbState.results = [];
-  dbState.first = null;
+  snapshot.articles = [];
 });
 
 describe('the /api/* bridge', () => {
@@ -85,9 +72,8 @@ describe('the /api/* bridge', () => {
     const res = await call('/api/explore?limit=5');
 
     expect(res.status).toBe(200);
-    // The request arrived at `serveExplore` with its query parsed: the SWR cache
-    // was consulted under the current versioned key.
-    expect(kvGet).toHaveBeenCalledWith(expect.stringContaining('explore:v6:'), 'json');
+    // The request arrived at `serveExplore`: the snapshot was read.
+    expect(kvGet).toHaveBeenCalledWith('poche:snapshot:v1', 'json');
     const body = (await res.json()) as { items: unknown[]; nextCursor: unknown };
     expect(Array.isArray(body.items)).toBe(true);
   });
@@ -152,53 +138,20 @@ describe('the RSS route endpoints', () => {
   });
 });
 
-describe('the legacy /a/<id> redirect route', () => {
-  it('301s a stored id to its canonical source, with a cacheable answer', async () => {
-    dbState.first = { canonical_url: 'https://example.com/story' };
-    const { GET } = await import('./pages/a/[id]');
-    const res = await GET({ params: { id: 'abc' } } as never);
-
-    expect(res.status).toBe(301);
-    expect(res.headers.get('location')).toBe('https://example.com/story');
-    // Bookmarks resolve through here repeatedly; the browser cache is what
-    // keeps a redirect from costing a D1 lookup every time.
-    expect(res.headers.get('cache-control')).toContain('max-age=86400');
-  });
-
-  it('404s an id nobody stored', async () => {
-    const { GET } = await import('./pages/a/[id]');
-    const res = await GET({ params: { id: 'missing' } } as never);
-
-    expect(res.status).toBe(404);
-    expect(res.headers.get('location')).toBeNull();
-  });
-
-  it('answers HEAD with the same handler as GET', async () => {
-    // `export const HEAD = GET` is the whole HEAD support. A second handler
-    // would silently drift from the GET's status and headers.
-    const mod = await import('./pages/a/[id]');
-    expect(mod.HEAD).toBe(mod.GET);
-  });
-});
-
 describe('the card fragment endpoint', () => {
-  /** One row in the shape EXPLORE_ARTICLE_COLUMNS returns. */
+  /** One link in the shape the snapshot stores. */
   const row = (id: string, title: string) => ({
     id,
     title,
     description: '',
-    ai_summary: '',
-    ai_blurb: '',
-    canonical_url: `https://example.com/${id}`,
-    image_url: '/og.png',
-    image_width: 1200,
-    image_height: 630,
-    published_at: 1786080856000,
-    day_bucket: 20672,
+    url: `https://example.com/${id}`,
+    imageUrl: '/og.png',
+    isVideo: false,
+    imageWidth: 1200,
+    imageHeight: 630,
+    sourceDomain: 'example.com',
+    publishedAt: 1786080856000,
     category: 'tools',
-    quality_score: 82,
-    freshness_score: 60,
-    tags: '["tools"]',
   });
 
   const get = async (path: string) => {
@@ -212,7 +165,7 @@ describe('the card fragment endpoint', () => {
   it('returns the page already rendered, in the wrapper the view asks for', async () => {
     // The client appends this with insertAdjacentHTML, so the wrapper has to
     // match the container: <li> goes into the <ol>, <article> into the section.
-    dbState.results = [row('a', 'First story')];
+    snapshot.articles = [row('a', 'First story')];
 
     const list = await get('/cards.json?view=list&limit=1');
     expect(list.status).toBe(200);
@@ -221,7 +174,7 @@ describe('the card fragment endpoint', () => {
     expect(body.html).toContain('<li');
     expect(body.html).not.toContain('<article');
 
-    dbState.results = [row('a', 'First story')];
+    snapshot.articles = [row('a', 'First story')];
     const grid = await get('/cards.json?view=grid&limit=1');
     const gridBody = (await grid.json()) as { html: string };
     expect(gridBody.html).toContain('<article');
@@ -229,7 +182,7 @@ describe('the card fragment endpoint', () => {
 
   it('falls back to the grid for an unrecognised view', async () => {
     // A stale or hand-edited link should still render cards.
-    dbState.results = [row('a', 'First story')];
+    snapshot.articles = [row('a', 'First story')];
     const res = await get('/cards.json?view=bogus&limit=1');
     expect(((await res.json()) as { html: string }).html).toContain('<article');
   });
@@ -238,15 +191,16 @@ describe('the card fragment endpoint', () => {
     // An empty fragment with a 200 would make the board append nothing and
     // declare the feed finished — the failure would look like the end of the
     // corpus.
-    const original = fakeEnv.DB.prepare;
-    fakeEnv.DB.prepare = vi.fn(() => {
-      throw new Error('d1 down');
-    });
+    snapshot.articles = null;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('', { status: 503 })),
+    );
     try {
       const res = await get('/cards.json');
       expect(res.status).toBe(502);
     } finally {
-      fakeEnv.DB.prepare = original;
+      vi.unstubAllGlobals();
     }
   });
 

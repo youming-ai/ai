@@ -6,26 +6,9 @@
 // wiring — media is answered *before* Astro's handler is consulted.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../src/data/api';
-import { PRUNE_CRON } from '../src/feeds/retention';
 
 const { handle } = vi.hoisted(() => ({ handle: vi.fn() }));
 vi.mock('@astrojs/cloudflare/handler', () => ({ handle }));
-
-// The sweep is chosen by comparing controller.cron against PRUNE_CRON, and a
-// drift there once ran a second full ingest for weeks with nothing failing
-// loudly. Pinning the two strings in void.config.ts (retention.cron.test.ts) does
-// not cover the comparison itself, so these tests drive it directly.
-const { ingestAllSources, pruneOldRecords } = vi.hoisted(() => ({
-  ingestAllSources: vi.fn(),
-  pruneOldRecords: vi.fn(),
-}));
-vi.mock('../src/feeds/ingest', () => ({ ingestAllSources }));
-vi.mock('../src/feeds/retention', async (importOriginal) => ({
-  // PRUNE_CRON stays real: the comparison under test must use the same constant
-  // the void.config.ts binding test pins.
-  ...(await importOriginal<typeof import('../src/feeds/retention')>()),
-  pruneOldRecords,
-}));
 
 import entrypoint from './entrypoint';
 
@@ -82,7 +65,7 @@ describe('entrypoint fetch', () => {
   });
 
   it('delegates every other path to Astro', async () => {
-    for (const path of ['/', '/a/abc', '/api/explore', '/rss.xml']) {
+    for (const path of ['/', '/tools', '/api/explore', '/rss.xml']) {
       const res = await entrypoint.fetch!(request(`https://x${path}`), ENV, mockCtx());
       expect(res.status, path).toBe(200);
       expect(await res.text(), path).toBe('astro');
@@ -123,102 +106,5 @@ describe('entrypoint fetch', () => {
     const res = await entrypoint.fetch!(request('https://x/media/%'), ENV, mockCtx());
     expect(res.status).toBe(400);
     expect(handle).not.toHaveBeenCalled();
-  });
-});
-
-describe('entrypoint scheduled', () => {
-  const report = {
-    sources: 1,
-    fetched: 3,
-    trimmed: 0,
-    skipped: 1,
-    stored: 2,
-    uncategorized: 0,
-    unmappedCategories: [],
-    failed: [],
-  };
-
-  function controller(cron: string): ScheduledController {
-    return { cron, scheduledTime: 0, noRetry: () => {} } as unknown as ScheduledController;
-  }
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    ingestAllSources.mockResolvedValue(report);
-    pruneOldRecords.mockResolvedValue(undefined);
-  });
-
-  it('runs the sweep on PRUNE_CRON and nothing else', async () => {
-    await entrypoint.scheduled!(controller(PRUNE_CRON), ENV, mockCtx());
-    expect(pruneOldRecords).toHaveBeenCalledOnce();
-    expect(ingestAllSources).not.toHaveBeenCalled();
-  });
-
-  it('runs an ingest on the frequent tick and does not sweep', async () => {
-    await entrypoint.scheduled!(controller('*/15 * * * *'), ENV, mockCtx());
-    expect(ingestAllSources).toHaveBeenCalledOnce();
-    expect(pruneOldRecords).not.toHaveBeenCalled();
-  });
-
-  it('treats an unrecognised schedule as an ingest tick', async () => {
-    // Documented behaviour: anything that is not PRUNE_CRON is an ingest. A
-    // third trigger added to void.config.ts therefore fans out twice, which is
-    // the failure retention.cron.test.ts pins the count to prevent.
-    await entrypoint.scheduled!(controller('0 4 * * *'), ENV, mockCtx());
-    expect(ingestAllSources).toHaveBeenCalledOnce();
-    expect(pruneOldRecords).not.toHaveBeenCalled();
-  });
-
-  it('reports a scheduled failure instead of letting the tick vanish', async () => {
-    // Cron invocations are not retried, so a throw escaping this handler means
-    // the tick did not happen and nothing said so. Per-source and per-article
-    // failures are handled inside ingest; this covers the setup failure.
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    ingestAllSources.mockRejectedValueOnce(new Error('D1 unavailable'));
-
-    // The rejection has to escape: swallowing it reports a successful
-    // invocation for a tick that never ran, and a scheduled event that rejects
-    // is what follows the platform's retry path.
-    await expect(entrypoint.scheduled!(controller('*/15 * * * *'), ENV, mockCtx())).rejects.toThrow(
-      'D1 unavailable',
-    );
-
-    expect(error).toHaveBeenCalledWith(
-      expect.stringContaining('*/15 * * * * failed:'),
-      expect.objectContaining({ message: 'D1 unavailable' }),
-    );
-  });
-
-  it('names unmapped publisher categories at info level, and failed sources at error', async () => {
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    ingestAllSources.mockResolvedValue({
-      ...report,
-      uncategorized: 2,
-      unmappedCategories: ['Robotics'],
-      failed: ['ServeTheHome'],
-    });
-
-    await entrypoint.scheduled!(controller('*/15 * * * *'), ENV, mockCtx());
-
-    // Failed sources stay at error — a source can fail every tick for a day with
-    // nothing else noticing. An unmapped Poche category names the registry entry
-    // its stories are missing.
-    expect(log).toHaveBeenCalledWith(
-      expect.stringContaining('unregistered publisher category'),
-      'Robotics',
-    );
-    expect(error).toHaveBeenCalledWith(expect.stringContaining('sources failed'), 'ServeTheHome');
-  });
-
-  it('reports the window and cap trimming at info level', async () => {
-    // Not decoration: a publisher that switches to a full-archive feed shows up
-    // here as a jump instead of as a silently longer tick.
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    ingestAllSources.mockResolvedValue({ ...report, trimmed: 1200 });
-
-    await entrypoint.scheduled!(controller('*/15 * * * *'), ENV, mockCtx());
-
-    expect(log).toHaveBeenCalledWith(expect.stringContaining('trimmed 1200/1203'));
   });
 });

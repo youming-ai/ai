@@ -1,4 +1,4 @@
-// --- Curated Explore content (D1 content layer) ---
+// --- Explore content (the Poche snapshot in KV) ---
 
 export interface ExploreArticle {
   id: string;
@@ -24,7 +24,7 @@ export interface ExploreFeed {
   nextCursor: string | null;
   /** Set by the SSR composer when the feed could not be read at all, so the
    *  page can say so rather than blaming the reader's filters. Never part of
-   *  the cached API payload, so it does not change the explore key's shape. */
+   *  the API payload. */
   unavailable?: boolean;
 }
 
@@ -38,10 +38,9 @@ export interface ExploreFilterOption {
 
 export interface ExploreFilterSet {
   categories: ExploreFilterOption[];
-  /** Every published row the board can show, which is not the sum of the
-   *  per-category counts: a row whose publisher category is not in the registry
-   *  is stored with `category = NULL`, so it appears on the global board and in
-   *  no hub. Summing the options undercounted "All links" for exactly as long
-   *  as a taxonomy drift lasted. `null` means the count could not be read. */
+  /** Every link the board can show, which is not the sum of the per-category
+   *  counts: a link whose publisher category is not in the registry has
+   *  `category: null`, so it appears on the global board and in no hub.
+   *  `null` means the count could not be read. */
   total?: number | null;
 }

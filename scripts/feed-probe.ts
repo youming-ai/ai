@@ -1,125 +1,43 @@
-// Feed probe: fetch every registered source the way ingest does and run the
-// real parseRss over the bytes.
+// Feed probe: fetch Poche Explore the way the Worker does and run the real
+// parser and normaliser over the bytes.
 //
 //   bun run feeds:probe
 //
-// This exists because AGENTS.md's first gotcha is "probe the exact URL with
-// RSS_HEADERS before changing parser or storage code" — and because the source
-// list itself is only as good as the last measurement. It reports, per source:
-// liveness, how many items actually parse, how much text each item carries (that
-// is the card's deck, and a feed with none renders bare titles), whether images and publisher categories survive, how
-// many items fall inside the freshness window, and the newest headline.
-//
-// It reads FEED_SOURCES rather than its own list on purpose: the point is to
-// check what is deployed, so a source that has since gone 403 or stopped
-// publishing is visible here and not only in production logs.
+// The board is whatever this feed parses to, so run it before changing the
+// source, the cap, or the parser. It reports liveness, how many items parse,
+// how many the board keeps (canonical http(s) URLs, one per URL, capped), how
+// much text each carries (the card's deck — a feed with none renders bare
+// titles), and how many keep an image and a registry category.
+import { canonicalCategory } from '../src/categories';
+import { RSS_HEADERS, toExploreArticles } from '../src/feeds/poche';
 import { parseRss } from '../src/feeds/rss';
-import { FEED_SOURCES, INGEST_MAX_AGE_MS } from '../src/feeds/sources';
-import type { FeedSource } from '../src/feeds/types';
-import { CRAWLER_USER_AGENT } from '../src/site';
+import { POCHE_FEED } from '../src/feeds/sources';
 
-const RSS_HEADERS = {
-  accept: 'application/rss+xml, application/atom+xml, application/json, text/xml, */*',
-  'user-agent': CRAWLER_USER_AGENT,
-};
+const started = Date.now();
+const response = await fetch(POCHE_FEED.url, {
+  headers: RSS_HEADERS,
+  signal: AbortSignal.timeout(15_000),
+});
+const text = await response.text();
+const parsed = parseRss(text);
+const kept = await toExploreArticles(parsed, POCHE_FEED.maxItems);
+const lengths = kept.map((article) => article.description.length).sort((a, b) => a - b);
+const unmapped = [
+  ...new Set(
+    parsed.flatMap((item) =>
+      item.category && !canonicalCategory(item.category) ? [item.category] : [],
+    ),
+  ),
+];
 
-interface Probe {
-  id: string;
-  status: number;
-  type: string;
-  kb: number;
-  items: number;
-  kept: number;
-  medianChars: number;
-  images: number;
-  categories: number;
-  ms: number;
-  note: string;
-}
-
-async function probe(source: FeedSource, now: number): Promise<Probe> {
-  const started = Date.now();
-  const base: Probe = {
-    id: source.id,
-    status: 0,
-    type: 'ERR',
-    kb: 0,
-    items: 0,
-    kept: 0,
-    medianChars: 0,
-    images: 0,
-    categories: 0,
-    ms: 0,
-    note: '',
-  };
-  try {
-    const response = await fetch(source.url, {
-      headers: RSS_HEADERS,
-      signal: AbortSignal.timeout(15_000),
-    });
-    const text = await response.text();
-    const parsed = parseRss(text, source, now);
-    const fresh = parsed.filter((item) => item.publishedAt >= now - INGEST_MAX_AGE_MS);
-    const lengths = fresh.map((item) => item.description.length).sort((a, b) => a - b);
-    return {
-      id: source.id,
-      status: response.status,
-      type: (response.headers.get('content-type') ?? '').split(';')[0] ?? '',
-      kb: Math.round(text.length / 1024),
-      items: parsed.length,
-      // What ingest would actually store: window first, cap second.
-      kept: Math.min(fresh.length, source.maxItems),
-      medianChars: lengths.length ? lengths[Math.floor(lengths.length / 2)]! : 0,
-      images: fresh.filter((item) => item.imageUrl).length,
-      categories: fresh.filter((item) => item.category).length,
-      ms: Date.now() - started,
-      note: fresh[0]?.title.slice(0, 56) ?? '',
-    };
-  } catch (error) {
-    return {
-      ...base,
-      ms: Date.now() - started,
-      note: String((error as Error).message).slice(0, 56),
-    };
-  }
-}
-
-const now = Date.now();
-const results: Probe[] = [];
-for (const source of FEED_SOURCES) results.push(await probe(source, now));
-
-const pad = (value: string | number, width: number) => String(value).padEnd(width);
-console.log(
-  `${pad('id', 22)}${pad('http', 6)}${pad('KB', 6)}${pad('parsed', 8)}${pad('kept', 6)}` +
-    `${pad('medChars', 10)}${pad('img', 5)}${pad('cat', 5)}${pad('ms', 7)}newest headline`,
-);
-for (const result of results) {
-  console.log(
-    pad(result.id, 22) +
-      pad(result.status, 6) +
-      pad(result.kb, 6) +
-      pad(result.items, 8) +
-      pad(result.kept, 6) +
-      pad(result.medianChars, 10) +
-      pad(result.images, 5) +
-      pad(result.categories, 5) +
-      pad(result.ms, 7) +
-      result.note,
-  );
-}
-
-const live = results.filter((r) => r.status === 200 && r.kept > 0);
-const thin = results.filter((r) => r.status === 200 && r.kept > 0 && r.medianChars < 40);
-console.log(`\nlive and contributing: ${live.length}/${results.length}`);
-console.log(`would be trimmed to nothing (stale or over-cap): ${results.length - live.length}`);
-console.log(
-  `thin text (median under 40 chars, too thin for a card deck): ${thin.map((r) => r.id).join(', ') || '(none)'}`,
-);
-if (results.some((r) => r.status !== 200)) {
-  console.log(
-    `not answering: ${results
-      .filter((r) => r.status !== 200)
-      .map((r) => `${r.id}(${r.status})`)
-      .join(', ')}`,
-  );
-}
+console.log(`${POCHE_FEED.name}  ${POCHE_FEED.url}`);
+console.log(`http        ${response.status} ${response.headers.get('content-type') ?? ''}`);
+console.log(`size        ${Math.round(text.length / 1024)} KB in ${Date.now() - started} ms`);
+console.log(`parsed      ${parsed.length}`);
+console.log(`kept        ${kept.length} (cap ${POCHE_FEED.maxItems})`);
+console.log(`median deck ${lengths.length ? lengths[Math.floor(lengths.length / 2)] : 0} chars`);
+console.log(`images      ${kept.filter((article) => article.imageUrl).length}`);
+console.log(`categorised ${kept.filter((article) => article.category).length}`);
+if (unmapped.length > 0)
+  console.log(`unmapped    ${unmapped.join(', ')} (add to src/categories.ts)`);
+console.log(`newest      ${kept[0]?.title ?? '(none)'}`);

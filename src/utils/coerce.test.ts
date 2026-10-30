@@ -1,13 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeEntities, escapeXml, num } from './coerce';
-
-describe('num', () => {
-  it('passes finite numbers through and coerces numeric strings', () => {
-    expect(num(3)).toBe(3);
-    expect(num('3')).toBe(3);
-    expect(num(Number.NaN)).toBe(0);
-  });
-});
+import { decodeEntities, escapeXml } from './coerce';
 
 describe('decodeEntities', () => {
   it('decodes numeric and named entities', () => {

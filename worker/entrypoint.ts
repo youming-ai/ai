@@ -3,7 +3,6 @@
 import { handle } from '@astrojs/cloudflare/handler';
 import type { Env } from '../src/data/api';
 import { mediaRequest } from '../src/media';
-import { scheduled } from './scheduled';
 
 const entrypoint: ExportedHandler<Env> = {
   fetch(request, env, ctx) {
@@ -14,11 +13,6 @@ const entrypoint: ExportedHandler<Env> = {
     if (media) return media;
     return handle(request, env, ctx);
   },
-
-  // In production Void replaces this with its own dispatcher, which runs the
-  // job in crons/desk.ts — the same function. It stays here for local
-  // `wrangler dev --test-scheduled` and for the tests.
-  scheduled,
 };
 
 export default entrypoint;

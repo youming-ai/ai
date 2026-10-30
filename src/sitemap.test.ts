@@ -4,21 +4,13 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 // The route reads its bindings from `cloudflare:workers`, so it is stubbed for
-// the two cases below. Everything else in this file is pure.
-const failingDb = {
-  prepare: () => ({
-    all: async () => {
-      throw new Error('D1 down');
-    },
-  }),
-};
+// the failure case below. Everything else in this file is pure.
 const coldCache = { get: vi.fn(async () => null), put: vi.fn(async () => {}) };
 
 vi.mock('cloudflare:workers', () => ({
-  env: { DB: failingDb, CACHE: coldCache },
+  env: { CACHE: coldCache },
 }));
-import type { Env, SitemapData } from './data/api';
-import { getSitemapNews } from './data/sitemapData';
+import type { SitemapData } from './data/api';
 import { renderSitemap, sitemapEntries } from './sitemap';
 import { SITE_ORIGIN } from './site';
 
@@ -126,34 +118,6 @@ describe('canonical origin', () => {
   });
 });
 
-describe('sitemap cache key', () => {
-  it('reads one versioned entry, not an unversioned one', async () => {
-    // The other three cache keys have a test that names them; this one did not,
-    // so a silent reuse of an older key shape would have gone unnoticed — which
-    // is exactly how the filters key once served a stale payload.
-    const get = vi.fn(async () => null);
-    const env = {
-      CACHE: { get, put: vi.fn(async () => {}) },
-      // The sitemap aggregate is prepared and awaited directly; it never chains
-      // `.bind()`, so the mock mirrors that shape rather than carrying a branch
-      // that cannot run.
-      DB: { prepare: vi.fn(() => ({ all: vi.fn(async () => ({ results: [] })) })) },
-    } as unknown as Env;
-    const ctx = {
-      waitUntil: vi.fn(),
-      passThroughOnException: vi.fn(),
-      props: {},
-      tracing: {},
-    } as unknown as ExecutionContext;
-
-    await getSitemapNews(env, ctx);
-    // Called once, then checked: asserting only the arguments would let an
-    // unversioned or older-shaped key be read first and forgotten.
-    expect(get).toHaveBeenCalledTimes(1);
-    expect(get).toHaveBeenCalledWith('sitemap:news:v3', 'json');
-  });
-});
-
 describe('the sitemap route when the lookup fails', () => {
   const cfContext = {
     waitUntil: vi.fn(),
@@ -164,10 +128,15 @@ describe('the sitemap route when the lookup fails', () => {
 
   it('answers 503 rather than an empty sitemap', async () => {
     // An empty <urlset> with a 200 is a claim about the site — "nothing here" —
-    // and on a cold cache a D1 outage used to make exactly that claim. A 5xx is
-    // the honest answer and leaves crawlers holding the last sitemap they read.
+    // and on a cold cache an upstream outage used to make exactly that claim. A
+    // 5xx is the honest answer and leaves crawlers holding the last sitemap.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('', { status: 503 })),
+    );
     const { GET } = await import('./pages/sitemap.xml');
     const res = await GET({ locals: { cfContext } } as never);
+    vi.unstubAllGlobals();
 
     expect(res.status).toBe(503);
     expect(res.headers.get('retry-after')).toBe('300');

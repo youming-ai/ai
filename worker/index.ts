@@ -14,7 +14,7 @@ export default {
       const url = new URL(request.url);
       if (url.pathname === '/api/health') {
         if (request.method !== 'GET') return new Response('Method not allowed', { status: 405 });
-        return healthReport(env);
+        return healthReport(env, ctx);
       }
       if (url.pathname === '/api/explore') {
         if (request.method !== 'GET') return new Response('Method not allowed', { status: 405 });

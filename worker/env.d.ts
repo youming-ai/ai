@@ -13,7 +13,6 @@
 declare namespace Cloudflare {
   interface Env {
     CACHE: KVNamespace;
-    DB: D1Database;
     ASSETS: Fetcher;
   }
 }
