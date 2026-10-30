@@ -46,9 +46,9 @@ export default function ExploreCard({
 
   // Engage the shimmer only when the image is genuinely still loading — cached
   // / already-complete images stay visible and never flash. Rendered with no
-  // shimmer and no hidden state; `src/scripts/board.ts` adds it after paint,
-  // which is also where a broken image gets hidden (a documented behaviour: a
-  // dead feed image must not leave a broken-image icon in the board).
+  // shimmer and no placeholder; `src/scripts/board.ts` adds them after paint.
+  // A broken image keeps its frame and shows the brand mark instead
+  // (`[data-media-state]` in index.css), so a failure never resizes the card.
 
   if (variant === 'list') {
     // The whole row is the outbound link: with no summary page, the card's job
@@ -74,6 +74,9 @@ export default function ExploreCard({
     article.imageWidth > 0 && article.imageHeight > 0
       ? `aspect-ratio:${article.imageWidth} / ${article.imageHeight}`
       : undefined;
+  // No Referer: X's image CDN answers a request from another site with a 351
+  // (and some publishers with a 403), while the same request without one is a
+  // 200 — measured 5/5 each way on 2026-10-30. That was most broken card art.
   const media = article.isVideo
     ? // The feed handed us a video file, so the thumbnail is the video itself:
       // a muted loop is the only thumbnail that guarantees something visible —
@@ -85,8 +88,8 @@ export default function ExploreCard({
       // that check runs. aria-hidden is safe here: without `controls` the
       // element is not focusable, and the wrapping link already carries the
       // article title as its name.
-      html`<video data-preview="true" data-card-media="true" src="${withTemporalFragment(imageUrl)}" muted="" loop="" playsinline="" preload="none" aria-hidden="true" class="h-full w-full object-cover"></video>`
-    : html`<img data-card-media="true"${attr('fetchpriority', priority && 'high')} src="${imageUrl}" alt="" decoding="async" class="h-full w-full object-cover transition-opacity duration-300 opacity-100" loading="${priority ? 'eager' : 'lazy'}"/>`;
+      html`<video data-preview="true" data-card-media="true" src="${withTemporalFragment(imageUrl)}" muted="" loop="" playsinline="" preload="none" referrerpolicy="no-referrer" aria-hidden="true" class="h-full w-full object-cover"></video>`
+    : html`<img data-card-media="true"${attr('fetchpriority', priority && 'high')} src="${imageUrl}" alt="" referrerpolicy="no-referrer" decoding="async" class="h-full w-full object-cover transition-opacity duration-300 opacity-100" loading="${priority ? 'eager' : 'lazy'}"/>`;
 
   return html`<article class="ds-card contain-layout mb-3 overflow-hidden break-inside-avoid rounded-card border border-line/40 bg-panel/70">
     <a href="${article.url}" target="_blank" rel="noopener noreferrer" class="group block">
@@ -95,7 +98,7 @@ export default function ExploreCard({
         <span aria-hidden="true" class="shrink-0">↗</span>
         <span class="sr-only">Opens in a new tab.</span>
       </div>
-      ${imageUrl && html`<div data-image-frame="true" class="aspect-video w-full overflow-hidden bg-overlay/5"${attr('style', frameStyle)}>${media}</div>`}
+      ${imageUrl && html`<div data-image-frame="true" class="relative aspect-video w-full overflow-hidden bg-overlay/5"${attr('style', frameStyle)}>${media}</div>`}
       <div class="p-3">
         <h2 class="font-display text-lead font-bold leading-lead text-chalk transition-colors duration-150 group-hover:text-pitch">${article.title}</h2>
         ${description && html`<p class="mt-1.5 ds-body line-clamp-3 text-chalkdim">${description}</p>`}

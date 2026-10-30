@@ -63,6 +63,20 @@
 }
 
 @layer components {
+  /* Card image placeholder: the brand mark, while an image loads and in place
+     of one that failed. The frame keeps its size either way, so a third-party
+     image refusing to load never reflows the board. board.ts sets the state. */
+  [data-image-frame][data-media-state]::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: url('/logo.svg') center / 2.5rem no-repeat;
+    opacity: 0.35;
+  }
+  /* The violet sinks into the dark ground at the light theme's opacity. */
+  [data-theme='dark'] [data-image-frame][data-media-state]::before {
+    opacity: 0.7;
+  }
   /* Capsule segmented controls — used by the explore Grid/List toggle. The
      `ds-segmented-blur` variant carried the additional backdrop blur a glass
      surface needed; nothing currently sits on glass. */

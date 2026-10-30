@@ -291,13 +291,16 @@ function initTheme(): void {
 /** Card media: images and looping video thumbnails. Both were React effects.
  *
  *  Two of these are load-bearing rather than cosmetic:
- *  - a feed image that fails to load must be hidden, or the board shows broken
- *    image icons where a story should be (a documented behaviour, and the feed
- *    is third-party so failures are normal);
+ *  - a feed image that fails to load is replaced by the brand placeholder, in a
+ *    frame that keeps its size: the feed is third-party (X's CDN refuses
+ *    hotlinks intermittently), and collapsing the frame reflowed the masonry
+ *    under the reader;
  *  - a looping video must not start before reduced motion has been checked,
  *    which is why the markup carries no `autoplay` attribute at all.
  *  The shimmer is the cosmetic third: it only engages for an image that is still
- *  loading, so a cached image never flashes. */
+ *  loading, so a cached image never flashes. While loading and after a failure
+ *  the frame carries `data-media-state`, which index.css paints as the brand
+ *  mark. */
 /** Previews collected across the initial render and every appended page, so one
  *  motion-preference listener governs all of them. */
 const previewVideos: HTMLVideoElement[] = [];
@@ -317,8 +320,15 @@ function wireMedia(roots: (Element | Document)[]): void {
   };
   const settle = (frame: HTMLElement, media: HTMLElement): void => {
     frame.classList.remove('animate-pulse');
+    delete frame.dataset.mediaState;
     media.classList.remove('opacity-0');
     media.classList.add('opacity-100');
+  };
+  /** Keep the frame — and so the card's height — and show the brand mark. */
+  const fail = (frame: HTMLElement, media: HTMLElement): void => {
+    frame.classList.remove('animate-pulse');
+    frame.dataset.mediaState = 'failed';
+    hide(media);
   };
 
   for (const frame of roots.flatMap((root) =>
@@ -329,20 +339,18 @@ function wireMedia(roots: (Element | Document)[]): void {
 
     if (media instanceof HTMLVideoElement) {
       previewVideos.push(media);
-      media.addEventListener('error', () => hide(frame), { once: true });
+      media.addEventListener('error', () => fail(frame, media), { once: true });
       continue;
     }
     if (!(media instanceof HTMLImageElement)) continue;
 
     if (!media.complete) {
       frame.classList.add('animate-pulse');
+      frame.dataset.mediaState = 'loading';
       media.classList.remove('opacity-100');
       media.classList.add('opacity-0');
     }
-    const onError = () => {
-      frame.classList.remove('animate-pulse');
-      hide(frame);
-    };
+    const onError = () => fail(frame, media);
     if (media.complete) {
       if (media.naturalWidth > 0) settle(frame, media);
       else onError();
