@@ -9,8 +9,8 @@ export const SITE_ORIGIN = 'https://ai.um1ng.me';
 // alone; the description says what the desk covers.
 export const SITE_NAME = 'AI Desk';
 export const SITE_TITLE = SITE_NAME;
-/** What every fetch the desk makes calls itself: ingest, and every probe in
- *  scripts/, which must be answered the way ingest is. The product token is the
+/** What every fetch the desk makes calls itself: the Poche fetch, and every
+ *  probe in scripts/, which must be answered the way the Worker is. The product token is the
  *  host rather than SITE_NAME, because a token cannot hold the name's spaces.
  *  Measured against the name-based token it replaced: all 12 sources answered
  *  this string with the same status and item count. */
@@ -24,8 +24,7 @@ export const SITE_DESCRIPTION =
 export const GLOBAL_FEED_LABEL = 'All links';
 /** Reported by /api/health so a deployed Worker can be identified without the
  *  dashboard. Duplicated from package.json, which a Worker cannot import —
- *  `index.css.test.ts` holds the two together, the way retention.cron.test.ts
- *  holds PRUNE_CRON to void.config.ts. */
+ *  `index.css.test.ts` holds the two together. */
 export const SITE_VERSION = '0.1.0';
 
 export const SITE_LOCALE = 'en_US';

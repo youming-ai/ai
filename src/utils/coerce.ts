@@ -42,8 +42,8 @@ const LONE_LOW = /(?<![\ud800-\udbff])[\udc00-\udfff]/g;
  *  XML 1.0 cannot represent at all (numeric references decode to them, and JS
  *  `\s` — all `stripHtml` collapses — does not cover most of them). One such
  *  character makes the whole document non-well-formed, so every subscriber
- *  loses the feed. They are dropped here rather than at ingest, because the
- *  stored title and description feed the dedupe fingerprint. */
+ *  loses the feed. They are dropped here, at render time, so the parsed text
+ *  stays as the publisher wrote it. */
 export function escapeXml(value: string): string {
   return value
     .replace(XML_ILLEGAL, '')
