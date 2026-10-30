@@ -32,14 +32,6 @@
         "binding": "CACHE",
         "id": "b5d6927aea7345efaddf56bcc2878e89"
       }
-    ],
-    "d1_databases": [
-      {
-        "binding": "DB",
-        "database_name": "umuo-content",
-        "database_id": "3d229c09-2965-4dbd-a17d-b4e43b15c86d",
-        "migrations_dir": "./db/migrations"
-      }
     ]
   },
   "resolved": {
@@ -76,15 +68,7 @@
         "id": "b5d6927aea7345efaddf56bcc2878e89"
       }
     ],
-    "d1_databases": [
-      {
-        "binding": "DB",
-        "database_name": "umuo-content",
-        "database_id": "3d229c09-2965-4dbd-a17d-b4e43b15c86d",
-        "migrations_dir": "./db/migrations"
-      }
-    ],
     "account_id": "adec54ff48f1c2618cf92f2279377392"
   },
-  "text": "{\n  \"name\": \"ai\",\n  \"compatibility_date\": \"2026-07-17\",\n  \"compatibility_flags\": [\n    \"nodejs_compat\",\n    \"nodejs_als\"\n  ],\n  \"main\": \"./worker/entrypoint.ts\",\n  \"routes\": [\n    {\n      \"pattern\": \"ai.um1ng.me\",\n      \"custom_domain\": true\n    }\n  ],\n  \"workers_dev\": false,\n  \"preview_urls\": false,\n  \"observability\": {\n    \"enabled\": true,\n    \"traces\": {\n      \"enabled\": true,\n      \"head_sampling_rate\": 0.01\n    },\n    \"redact_query_string\": true\n  },\n  \"assets\": {\n    \"directory\": \"./dist\",\n    \"binding\": \"ASSETS\"\n  },\n  \"kv_namespaces\": [\n    {\n      \"binding\": \"CACHE\",\n      \"id\": \"b5d6927aea7345efaddf56bcc2878e89\"\n    }\n  ],\n  \"d1_databases\": [\n    {\n      \"binding\": \"DB\",\n      \"database_name\": \"umuo-content\",\n      \"database_id\": \"3d229c09-2965-4dbd-a17d-b4e43b15c86d\",\n      \"migrations_dir\": \"./db/migrations\"\n    }\n  ],\n  \"account_id\": \"adec54ff48f1c2618cf92f2279377392\"\n}\n"
+  "text": "{\n  \"name\": \"ai\",\n  \"compatibility_date\": \"2026-07-17\",\n  \"compatibility_flags\": [\n    \"nodejs_compat\",\n    \"nodejs_als\"\n  ],\n  \"main\": \"./worker/entrypoint.ts\",\n  \"routes\": [\n    {\n      \"pattern\": \"ai.um1ng.me\",\n      \"custom_domain\": true\n    }\n  ],\n  \"workers_dev\": false,\n  \"preview_urls\": false,\n  \"observability\": {\n    \"enabled\": true,\n    \"traces\": {\n      \"enabled\": true,\n      \"head_sampling_rate\": 0.01\n    },\n    \"redact_query_string\": true\n  },\n  \"assets\": {\n    \"directory\": \"./dist\",\n    \"binding\": \"ASSETS\"\n  },\n  \"kv_namespaces\": [\n    {\n      \"binding\": \"CACHE\",\n      \"id\": \"b5d6927aea7345efaddf56bcc2878e89\"\n    }\n  ],\n  \"account_id\": \"adec54ff48f1c2618cf92f2279377392\"\n}\n"
 }

@@ -86,7 +86,7 @@ it('renders a feed-supplied video as a <video> element, never as an <img>', () =
 
 it("says the feed is unavailable rather than blaming the reader's filters", () => {
   // The failure this pins: with the feed unreadable the page asserted "No links
-  // match these filters. Clear one to widen the explore feed." — a D1 or KV
+  // match these filters. Clear one to widen the explore feed." — a Poche or KV
   // outage presented as the reader's own doing, with an HTTP 200 and nothing
   // else to notice.
   const html = ExploreView({

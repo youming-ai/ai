@@ -1,14 +1,10 @@
-// Defensive coercion helpers shared by the feed and data layers.
-
-export function num(v: unknown): number {
-  return typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || 0;
-}
+// Text helpers for the feed parser and the RSS renderer.
 
 /** Shared HTML entity decoder for rss.
  *
  *  Numeric references are attacker-controlled: `String.fromCodePoint` throws a
  *  RangeError for anything outside `0..0x10FFFF`, and one such reference used to
- *  abort the whole parse — every 15-minute tick, forever, on the same feed item.
+ *  abort the whole parse — every refresh, forever, on the same feed item.
  *  Out-of-range and surrogate code points decode to nothing instead. */
 export function decodeEntities(value: string): string {
   const codePoint = (n: number): string =>
@@ -58,8 +54,4 @@ export function escapeXml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
-}
-
-export function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
 }

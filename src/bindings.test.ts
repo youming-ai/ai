@@ -10,9 +10,7 @@ import config from '../void.config';
 // env.d.ts and worker/env.d.ts). Both .d.ts files say "must match void.config.ts"
 // and AGENTS.md calls ASSETS's placement load-bearing, but nothing read them: a
 // dropped binding typechecked, and a binding renamed in the config alone
-// would have surfaced as a runtime `undefined` in production. This is the same
-// shape as retention.cron.test.ts, which holds PRUNE_CRON and the configured
-// `crons` array together.
+// would have surfaced as a runtime `undefined` in production.
 //
 // The `vars` are the part that bites hardest now: `wrangler types` emits them
 // as *literal* types, so a hand-written `string` in the .d.ts conflicts with the
@@ -30,11 +28,10 @@ function read(file: string): string {
 
 const cloudflare = config.cloudflare ?? {};
 
-/** Every binding the config declares: KV, D1, assets. */
+/** Every binding the config declares: KV, assets. */
 function configBindings(): string[] {
   return [
     ...(cloudflare.kv_namespaces ?? []).map((kv) => kv.binding),
-    ...(cloudflare.d1_databases ?? []).map((d1) => d1.binding),
     ...(cloudflare.assets?.binding ? [cloudflare.assets.binding] : []),
   ];
 }
@@ -91,7 +88,7 @@ describe('binding declarations', () => {
   it('parses the three files it is meant to be comparing', () => {
     // Guards the parsers themselves: a regex that matched nothing would make
     // every assertion below vacuously true, which is how a pin like this rots.
-    expect([...toml].sort()).toEqual(['ASSETS', 'CACHE', 'DB']);
+    expect([...toml].sort()).toEqual(['ASSETS', 'CACHE']);
     expect(vars.map((entry) => entry.key)).toEqual([]);
     expect(appBindings.length).toBeGreaterThan(0);
     expect(workerBindings.length).toBeGreaterThan(0);

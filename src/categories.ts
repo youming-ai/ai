@@ -2,9 +2,9 @@
 // segments (/<key>), feed-filter values, KV-key safety, and storage fallbacks
 // all check against this record. Adding a category is registry-only.
 //
-// The keys mirror Poche Explore's category labels (see enrich.test.ts): a label
-// missing here is stored as NULL and reaches no hub. Web3 keeps the historical
-// crypto key so stored rows and category URLs remain valid.
+// The keys mirror Poche Explore's category labels (see categories.test.ts): a
+// label missing here leaves the story uncategorised, so it reaches no hub. Web3
+// keeps the historical crypto key so category URLs remain valid.
 export interface Category {
   key: string; // URL first segment, e.g. 'design'
   label: string; // display name
@@ -36,9 +36,22 @@ export const CATEGORIES: Record<string, Category> = {
   other: category('other', 'Other', 'community'),
 };
 
-/** Label for a stored category key, falling back to the raw key when the
- *  registry has moved on (old rows must still render). */
+/** Label for a category key, falling back to the raw key when the registry
+ *  has moved on (a cached snapshot must still render). */
 export function categoryLabel(key: string | null): string {
   if (!key) return '';
   return CATEGORIES[key]?.label ?? key;
+}
+
+/** Resolve a publisher category (Poche's `· Category` footer) to a registry
+ *  key, by key or by label. Unknown values are null: the story still reaches
+ *  the global board, just no hub. */
+export function canonicalCategory(value: string | null): string | null {
+  if (!value) return null;
+  const candidate = value.trim().toLowerCase();
+  if (Object.hasOwn(CATEGORIES, candidate)) return candidate;
+  const byLabel = Object.values(CATEGORIES).find(
+    (category) => category.label.toLowerCase() === candidate,
+  );
+  return byLabel ? byLabel.key : null;
 }

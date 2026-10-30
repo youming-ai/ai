@@ -1,8 +1,8 @@
 # AI Desk
 
-A discovery board for tools, design, development and AI, powered by [Poche Explore](https://poche.app/explore). Updates every 15 minutes, with category pages and RSS feeds. Selection comes from Poche; no AI model is used.
+A discovery board for tools, design, development and AI, powered by [Poche Explore](https://poche.app/explore), with category pages and RSS feeds. The board is Poche's current feed, refreshed about every 10 minutes. Selection comes from Poche; no AI model is used.
 
-Built with Astro, Cloudflare Workers, D1 and KV.
+Built with Astro, Cloudflare Workers and KV. There is no database: the feed is fetched on demand and cached in KV.
 
 ## Development
 
@@ -13,7 +13,7 @@ bun install
 bun run dev
 ```
 
-The local database starts empty. See [scripts/README.md](./scripts/README.md) for database setup and local ingest.
+The dev server fetches the live Poche feed on the first request.
 
 ```sh
 bunx vitest run       # Tests
@@ -35,7 +35,7 @@ bun run feeds:probe  # Check the source feed
 bun run deploy
 ```
 
-Deploys through Void and applies pending D1 migrations. Cloudflare Workers Builds deploys `main` using `bun run build` followed by `bun run deploy`.
+Deploys through Void. Cloudflare Workers Builds deploys `main` using `bun run build` followed by `bun run deploy`.
 
 See [AGENTS.md](./AGENTS.md) for contributor guidelines.
 

@@ -1,4 +1,4 @@
-// RSS 2.0 renderer for the Explore feed. Pure: no DOM, no D1, no Worker
+// RSS 2.0 renderer for the Explore feed. Pure: no DOM, no KV, no Worker
 // bindings — importable by both the API handler and the SSR pages.
 import {
   GLOBAL_FEED_LABEL,
@@ -13,8 +13,6 @@ import { escapeXml } from '../utils/coerce';
 
 // Bound to the `atom:` prefix; the only Atom element is <atom:link rel="self">.
 const ATOM_XMLNS = 'http://www.w3.org/2005/Atom';
-
-// Channel uses the origin; items use the article's `id` so deletes/sweeps
 
 // RFC 822 with explicit `GMT` — some readers ignore <pubDate> quietly, and an
 // omit-zone date string fails to parse elsewhere.
@@ -35,12 +33,12 @@ function renderItem(article: ExploreArticle): string {
     '    <item>',
     `      <title>${escapeXml(article.title)}</title>`,
     `      <link>${escapeXml(article.url)}</link>`,
-    // isPermaLink=false: the article *id* (content fingerprint) is the stable
-    // identity, not the publisher URL.
+    // isPermaLink=false: the article *id* (a hash of the canonical URL) is
+    // the stable identity.
     `      <guid isPermaLink="false">${escapeXml(article.id)}</guid>`,
     `      <pubDate>${rfc822(article.publishedAt)}</pubDate>`,
   ];
-  // Plain text in D1, so XML-escaping is sufficient.
+  // Plain text after parseRss, so XML-escaping is sufficient.
   const description = article.description;
   if (description) parts.push(`      <description>${escapeXml(description)}</description>`);
   // <author> is specified as an email address; the publisher's domain is all

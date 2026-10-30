@@ -1,5 +1,5 @@
 import { decodeEntities } from '../utils/coerce';
-import type { FeedSource, RawArticle } from './types';
+import type { FeedItem } from './types';
 
 function stripHtml(value: string): string {
   // Remove real markup before decoding entities. Otherwise an escaped literal
@@ -51,7 +51,7 @@ function extractCategory(block: string): string | null {
   // Poche byline heuristic, not a contract: items carry
   // `<small><a>domain</a> · Category</small>` in content:encoded. The category
   // is the segment after the last middot; anything unparseable falls through
-  // to null and the source preset. If Poche restyles the byline this silently
+  // to null. If Poche restyles the byline this silently
   // yields null, so uncategorised stories stay visible on the global board.
   const encoded = decodeEntities(tagValue(block, ['content:encoded', 'description']));
   const match = encoded.match(/·\s*([^<]+)<\/small>/i);
@@ -59,16 +59,14 @@ function extractCategory(block: string): string | null {
   return last ? last : null;
 }
 
-export function parseRss(
-  xml: string,
-  source: FeedSource,
-  fetchedAt = Date.now(),
-): Omit<RawArticle, 'canonicalUrl' | 'fingerprint'>[] {
-  const articles: Omit<RawArticle, 'canonicalUrl' | 'fingerprint'>[] = [];
+/** Undated items are stamped with `fetchedAt`, so they sort as new rather than
+ *  being dropped. */
+export function parseRss(xml: string, fetchedAt = Date.now()): FeedItem[] {
+  const articles: FeedItem[] = [];
   // One item at a time, each isolated: a single malformed entry must cost that
   // entry only. When the whole `.map` could throw, one bad item in a rolling
-  // feed aborted the entire parse on every tick — the site stopped updating
-  // silently, and the item stayed in the feed to fail again 15 minutes later.
+  // feed aborted the entire parse on every refresh — the site stopped updating
+  // silently, and the item stayed in the feed to fail again on the next one.
   for (const block of itemBlocks(xml)) {
     try {
       const title = stripHtml(tagValue(block, ['title']));
@@ -89,8 +87,6 @@ export function parseRss(
       const category = extractCategory(block);
       if (title.length === 0 || url.length === 0) continue;
       articles.push({
-        sourceId: source.id,
-        sourceName: source.name,
         category,
         title,
         description,
@@ -99,7 +95,6 @@ export function parseRss(
         imageWidth: image.width,
         imageHeight: image.height,
         publishedAt,
-        fetchedAt,
       });
     } catch (error) {
       console.error('[rss] skipped an unparseable item:', error);

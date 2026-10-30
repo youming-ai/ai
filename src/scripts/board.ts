@@ -124,7 +124,7 @@ function initAppend(board: HTMLElement): void {
 
     try {
       // Matches EXPLORE_MAX_LIMIT (src/data/explore.ts). Written out rather than
-      // imported: that module pulls the D1/KV layer into the browser bundle.
+      // imported: that module pulls the KV/fetch layer into the browser bundle.
       const params = new URLSearchParams({ view, cursor, limit: '24' });
       if (category) params.set('category', category);
       const response = await fetch(`/cards.json?${params}`);

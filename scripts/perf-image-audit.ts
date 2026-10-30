@@ -7,20 +7,13 @@
 // which the hermetic fixture would never have shown.
 //
 // The extraction is the *real* one: this imports `parseRss`, the same function
-// the cron uses, so the audit cannot drift from what ingest stores. Only the
-// measurement is new.
+// the Worker uses, so the audit cannot drift from what the board shows. Only
+// the measurement is new.
 //
 // Run: bun run perf:images   (needs the network; the feed is external)
 import { parseRss } from '../src/feeds/rss';
-import { FEED_SOURCES } from '../src/feeds/sources';
-import { CRAWLER_USER_AGENT } from '../src/site';
-
-// Mirrors the headers in src/feeds/ingest.ts, which are module-private there.
-// A different UA here would measure a different response than ingest gets.
-const HEADERS = {
-  accept: 'application/rss+xml, application/atom+xml, application/json, text/xml, */*',
-  'user-agent': CRAWLER_USER_AGENT,
-};
+import { RSS_HEADERS as HEADERS } from '../src/feeds/poche';
+import { POCHE_FEED } from '../src/feeds/sources';
 
 /** Content-Length for a URL, via a one-byte ranged GET.
  *  HEAD is not usable: CDNs answer it without a body length often enough that
@@ -50,18 +43,12 @@ function format(bytes: number): string {
     : `${Math.round(bytes / 1024)} KB`;
 }
 
-const url = FEED_SOURCES[0] ? FEED_SOURCES[0].url : '';
-if (!url) {
-  console.error('perf-image-audit: no source in the registry');
-  process.exit(1);
-}
-
-const res = await fetch(url, { headers: HEADERS });
+const res = await fetch(POCHE_FEED.url, { headers: HEADERS });
 if (!res.ok) {
   console.error(`perf-image-audit: feed returned ${res.status}`);
   process.exit(1);
 }
-const articles = parseRss(await res.text(), FEED_SOURCES[0]!);
+const articles = parseRss(await res.text());
 
 // Dedupe in feed order: the first screen is the first N items, so order matters.
 const seen = new Set<string>();
@@ -94,7 +81,7 @@ const types = measured.reduce<Record<string, number>>((acc, m) => {
 // what a resize to the rendered size would target.
 const firstScreen = measured.slice(0, 10).reduce((sum, m) => sum + m.bytes, 0);
 
-console.log(`\ncard images in ${url}`);
+console.log(`\ncard images in ${POCHE_FEED.url}`);
 console.log(`  resolved            ${measured.length} of ${ordered.length} unique`);
 console.log(`  total               ${format(total)}`);
 console.log(`  median              ${format(sorted[Math.floor(sorted.length / 2)]!.bytes)}`);

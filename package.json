@@ -6,7 +6,7 @@
     "bun": ">=1.4.2"
   },
   "version": "0.1.0",
-  "description": "Curated explore feed template — Cloudflare Workers + D1 + KV + Astro",
+  "description": "Curated explore feed template — Cloudflare Workers + KV + Astro",
   "repository": "github:youming-ai/ai",
   "keywords": [
     "cloudflare",
@@ -22,7 +22,6 @@
     "dev": "astro dev",
     "build": "astro check && tsc -p tsconfig.worker.json && astro build && node scripts/perf-budget.mjs",
     "deploy": "./scripts/deploy.sh",
-    "db:migrate": "bunx --bun void db migrate --remote",
     "typecheck": "astro check && tsc -p tsconfig.worker.json",
     "preview": "astro preview",
     "test": "vitest",
@@ -30,7 +29,6 @@
     "lint:fix": "biome lint --write .",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "perf:seed": "./scripts/prep-local-board.sh",
     "perf:budget": "node scripts/perf-budget.mjs",
     "perf:images": "bun scripts/perf-image-audit.ts",
     "perf:probe": "node scripts/perf-probe.mjs --url http://127.0.0.1:8787/",

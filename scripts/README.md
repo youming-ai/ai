@@ -1,6 +1,6 @@
 # Render-performance harness
 
-Five tools and the record of what they measured. They exist because every claim
+Four tools and the record of what they measured. They exist because every claim
 about this app's performance should be reproducible by someone who does not
 trust the prose — including the numbers below, which lived only in PR
 descriptions until this file.
@@ -11,24 +11,21 @@ descriptions until this file.
 | --- | --- |
 | `bun run perf:probe` | Real Chrome via CDP under a fixed CPU throttle and a Slow-4G profile. LCP, FCP, CLS, a TBT proxy, render-blocking resources, bytes by type, and the request list. `--scroll N --scroll-until 130` adds a long-board phase; `--override-css` A/Bs a rendering rule on one build; `--screenshot`/`--viewport` capture the page. |
 | `bun run perf:budget` | Gzip budget for what a page **downloads**, computed by walking static imports from the page entries. Runs at the end of `bun run build`, so exceeding it fails the build. |
-| `bun run perf:seed` | Seeds a deterministic 200-row board into the local D1 that the *built* worker reads. |
 | `bun run perf:images` | Audits the live feed's card images through the real `parseRss`: total, median, largest, formats, and the fold's weight. |
-| `bun run feeds:probe` | The source registry's own instrument, kept here rather than in `src/`: fetches every entry in `FEED_SOURCES` with the real `parseRss` and reports liveness, parsed vs kept item counts (the freshness window and the per-source cap), median text length, images and publisher categories. Run it before changing a source, a cap, or the parser — the registry is only as good as its last measurement. |
+| `bun run feeds:probe` | The feed's own instrument, kept here rather than in `src/`: fetches Poche Explore with the Worker's headers and runs the real `parseRss` and normaliser, then reports liveness, parsed vs kept counts, median text length, images, categorised items and any publisher category the registry does not carry. Run it before changing the source, the cap, or the parser. |
 
 ## Measuring, in order
 
 ```bash
 bun run build                     # also runs the budget gate
 bunx wrangler dev --config dist/server/wrangler.json --port 8787 --local &
-bun run perf:seed                 # REQUIRED: the build regenerates wrangler.json,
-                                  # and Miniflare then names its D1 file from it —
-                                  # so every rebuild starts on an empty database
 bun run perf:probe --runs 3 --cpu 4 --net slow4g
 ```
 
-`perf:seed` is not optional and the failure it prevents is silent: without it the
-board renders its empty state and the numbers describe a different corpus. This
-was hit once.
+The board is the live Poche feed, fetched by the local Worker on its first
+request, so runs taken on different days measure different corpora and images.
+The recorded results below predate that: they were taken on a deterministic
+200-row board seeded into the D1 database the desk used to have.
 
 ## Recorded results
 
@@ -60,7 +57,7 @@ transform measurements are recorded in issue #158; those transforms have been re
 
 ## What these numbers do not cover
 
-- **Production images.** The render harness seeds `/og.png` so byte counts are
+- **Production images.** The recorded runs seeded `/og.png` so byte counts were
   stable; production cards load third-party images measured in megabytes. LCP in
   production is therefore governed by image delivery, not by anything in the
   table above. The numbers here were taken with the old 74,993-byte card; the
