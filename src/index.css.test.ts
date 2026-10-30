@@ -187,8 +187,7 @@ describe('design tokens', () => {
 describe('the reported version', () => {
   it('matches the one in package.json', () => {
     // /api/health reports a version a Worker cannot import — package.json is not
-    // in its bundle — so the constant is duplicated, and pinned here the way
-    // retention.cron.test.ts pins PRUNE_CRON to void.config.ts.
+    // in its bundle — so the constant is duplicated, and pinned here.
     const pkg = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
       version?: string;
     };

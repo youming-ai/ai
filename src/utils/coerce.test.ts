@@ -8,8 +8,8 @@ describe('decodeEntities', () => {
 
   it('drops out-of-range numeric references instead of throwing', () => {
     // One of these used to throw out of String.fromCodePoint, which aborted the
-    // whole parse — and so the whole ingest tick, on every tick after, for as
-    // long as the item stayed in the rolling feed.
+    // whole parse — and so every feed refresh after it, for as long as the
+    // item stayed in the rolling feed.
     expect(() => decodeEntities('&#1114112;')).not.toThrow();
     expect(decodeEntities('a&#1114112;b')).toBe('ab');
     expect(decodeEntities('a&#x110000;b')).toBe('ab');
