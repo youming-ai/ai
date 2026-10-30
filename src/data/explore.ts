@@ -244,8 +244,14 @@ export async function getSitemapNews(env: Env, ctx: ExecutionContext): Promise<S
   };
 }
 
-/** Whether the board can render: the snapshot is readable (fresh, revalidated
- *  or stale). Used by /api/health. */
-export async function snapshotReadable(env: Env, ctx: ExecutionContext): Promise<boolean> {
-  return (await readSnapshot(env, ctx)) !== null;
+/** Whether the board can render, and from what: `ok` (fresh or just
+ *  revalidated), `stale` (Poche failed, the kept copy is being served) or
+ *  `error` (nothing to serve). Used by /api/health. */
+export async function snapshotState(
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<'ok' | 'stale' | 'error'> {
+  const snapshot = await readSnapshot(env, ctx);
+  if (!snapshot) return 'error';
+  return snapshot.cache === 'STALE' ? 'stale' : 'ok';
 }

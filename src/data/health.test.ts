@@ -32,6 +32,20 @@ describe('healthReport', () => {
     });
   });
 
+  it('stays 200 but reports degraded while serving a stale snapshot', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('', { status: 503 })),
+    );
+    const res = await healthReport(envWithSnapshot({ body: '[]', at: 0 }), ctx);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      status: 'degraded',
+      checks: { feed: 'stale', cache: 'present' },
+    });
+  });
+
   it('degrades when the feed cannot be read on a cold cache', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.stubGlobal(
