@@ -732,7 +732,7 @@ describe('theme', () => {
 });
 
 describe('card media', () => {
-  it('collapses an image frame when the image failed before the script started', async () => {
+  it('shows the placeholder when the image failed before the script started', async () => {
     const { container } = render(
       ExploreView({
         initialData: feed([card('a', 'story')], null),
@@ -743,7 +743,28 @@ describe('card media', () => {
     vi.spyOn(image, 'complete', 'get').mockReturnValue(true);
     vi.spyOn(image, 'naturalWidth', 'get').mockReturnValue(0);
     await startBoard();
-    expect(container.querySelector<HTMLElement>('[data-image-frame]')!.style.display).toBe('none');
+    const frame = container.querySelector<HTMLElement>('[data-image-frame]')!;
+    expect(frame.style.display).toBe('');
+    expect(frame.dataset.mediaState).toBe('failed');
+    expect(image.style.display).toBe('none');
+  });
+
+  it('marks a loading image with the placeholder and clears it once loaded', async () => {
+    const { container } = render(
+      ExploreView({
+        initialData: feed([card('a', 'story')], null),
+        initialFilters: { categories: [] },
+      }),
+    );
+    const image = container.querySelector('[data-card-media]') as HTMLImageElement;
+    vi.spyOn(image, 'complete', 'get').mockReturnValue(false);
+    await startBoard();
+    const frame = container.querySelector<HTMLElement>('[data-image-frame]')!;
+    expect(frame.dataset.mediaState).toBe('loading');
+
+    image.dispatchEvent(new Event('load'));
+    // Cleared, so a transparent image never shows the mark through itself.
+    expect(frame.dataset.mediaState).toBeUndefined();
   });
 
   it('plays a video preview when motion is allowed', async () => {
@@ -834,11 +855,11 @@ describe('card media', () => {
       expect(container.querySelector('[data-board]')?.innerHTML).toContain('broken.png'),
     );
 
-    // Broken images are hidden on appended pages too.
+    // Broken images get the placeholder on appended pages too.
     const appended = container.querySelector<HTMLImageElement>('img[src="/broken.png"]');
     expect(appended).not.toBeNull();
     appended!.dispatchEvent(new Event('error'));
-    expect(appended!.closest<HTMLElement>('[data-image-frame]')!.style.display).toBe('none');
+    expect(appended!.closest<HTMLElement>('[data-image-frame]')!.dataset.mediaState).toBe('failed');
 
     // And the appended video preview is started, not left as a dark box.
     const video = container.querySelector<HTMLVideoElement>('video[data-card-media]');
@@ -846,9 +867,9 @@ describe('card media', () => {
     await waitFor(() => expect(play).toHaveBeenCalled());
   });
 
-  it('hides an image that fails to load', async () => {
-    // The feed is third-party, so failures are normal — and a broken-image icon
-    // where a story should be is a documented thing this board does not do.
+  it('replaces an image that fails to load with the placeholder, keeping the frame', async () => {
+    // The feed is third-party, so failures are normal. Collapsing the frame
+    // reflowed the masonry under the reader; the frame keeps its size instead.
     const { container } = render(
       ExploreView({
         initialData: feed([card('a', 'story')], null),
@@ -861,9 +882,10 @@ describe('card media', () => {
     expect(image).not.toBeNull();
     image!.dispatchEvent(new Event('error'));
 
-    expect(image!.closest<HTMLElement>('[data-image-frame]')!.style.display).toBe('none');
-    expect(container.querySelector('[data-image-frame]')?.classList.contains('animate-pulse')).toBe(
-      false,
-    );
+    const frame = image!.closest<HTMLElement>('[data-image-frame]')!;
+    expect(frame.style.display).toBe('');
+    expect(frame.dataset.mediaState).toBe('failed');
+    expect(image!.style.display).toBe('none');
+    expect(frame.classList.contains('animate-pulse')).toBe(false);
   });
 });
