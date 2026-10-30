@@ -1,6 +1,5 @@
 // Category registry — the single validation gate for category values: URL
-// segments (/<key>), feed-filter values, KV-key safety, and storage fallbacks
-// all check against this record. Adding a category is registry-only.
+// segments (/<key>) and feed-filter values check against this record. Adding a category is registry-only.
 //
 // The keys mirror Poche Explore's category labels (see categories.test.ts): a
 // label missing here leaves the story uncategorised, so it reaches no hub. Web3

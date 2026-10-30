@@ -25,7 +25,7 @@ interface ExploreQuery {
  *  a payload-shape change would otherwise be served in the old shape until it
  *  expired. Bump it whenever `ExploreArticle` changes. */
 const SNAPSHOT_KEY = 'poche:snapshot:v1';
-/** About the cadence the old cron polled at: Poche changes a few times an hour. */
+/** Poche changes a few times an hour. */
 const SNAPSHOT_FRESH_SECONDS = 10 * 60;
 /** Long on purpose. With no archive behind it, the stale snapshot is the only
  *  thing between a Poche outage and an empty board. */

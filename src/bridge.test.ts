@@ -13,8 +13,7 @@
 // `src/pages/api/[...route].ts` is the ONLY path to `worker/index.ts`, and
 // nothing tested it: the dispatcher's unit tests call `worker.fetch(...)`
 // directly, so deleting or repointing that route file would 404 every
-// `/api/explore` call — killing the island's data and its infinite scroll —
-// while the suite stayed green. That is the same shape as the P1 this repo
+// `/api/explore` call while the suite stayed green. That is the same shape as the P1 this repo
 // already shipped once (a /media route sitting in an unreachable file).
 //
 // The same argument covers the other route modules, which is why they are here

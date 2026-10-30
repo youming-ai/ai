@@ -6,15 +6,13 @@
     "bun": ">=1.4.2"
   },
   "version": "0.1.0",
-  "description": "Curated explore feed template — Cloudflare Workers + KV + Astro",
+  "description": "A discovery desk over Poche Explore — Astro on Cloudflare Workers + KV",
   "repository": "github:youming-ai/ai",
   "keywords": [
     "cloudflare",
     "astro",
-    "news",
     "explore",
-    "rss",
-    "template"
+    "rss"
   ],
   "type": "module",
   "packageManager": "bun@1.4.2",
@@ -32,7 +30,8 @@
     "perf:budget": "node scripts/perf-budget.mjs",
     "perf:images": "bun scripts/perf-image-audit.ts",
     "perf:probe": "node scripts/perf-probe.mjs --url http://127.0.0.1:8787/",
-    "feeds:probe": "bun scripts/feed-probe.ts"
+    "feeds:probe": "bun scripts/feed-probe.ts",
+    "brand:mark": "bun scripts/brand-mark.ts"
   },
   "dependencies": {
     "@astrojs/cloudflare": "latest",
