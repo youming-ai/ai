@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { ExploreArticle } from '../types';
-import ExploreCard from './explore/ExploreCard';
-import type { Html } from './html';
+import type { ExploreArticle } from '../../types';
+import ExploreCard from './ExploreCard';
+import type { Html } from '../html';
 
 /** Parses the rendered card the way the browser receives it. */
 function render(markup: Html): { container: HTMLElement } {

@@ -3,7 +3,7 @@ import type { Env } from './cache';
 import { snapshotState } from './explore';
 
 /** Shape returned by /api/health. `status` is the only field a monitor needs. */
-export interface HealthReport {
+interface HealthReport {
   status: 'ok' | 'degraded';
   version: string;
   checks: {

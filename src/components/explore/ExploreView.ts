@@ -154,10 +154,9 @@ export default function ExploreView({
   const cursor = initialData.nextCursor ?? '';
   const hasItems = initialData.items.length > 0;
 
-  // The payload's total counts the rows no hub holds — an unmapped publisher
-  // category is stored as NULL and shows on the global board only. Older cached
-  // payloads and the registry fallback carry none, so the sum is still the
-  // fallback.
+  // The total also counts links no hub holds — an unmapped publisher category
+  // is null and shows on the global board only. The registry fallback carries
+  // none, so the sum is still the fallback.
   const rail = categoryRail(
     initialFilters.categories,
     initialCategory,
@@ -165,7 +164,7 @@ export default function ExploreView({
     initialView,
   );
   // The mobile sheet's button names where the reader is, with its count; a hub
-  // with no rows is still named, at zero when counts are known.
+  // with no links is still named, at zero when counts are known.
   const currentCount = initialCategory
     ? (initialFilters.categories.find((option) => option.value === initialCategory)?.count ??
       (initialFilters.total === null ? null : 0))

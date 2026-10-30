@@ -1,6 +1,6 @@
 // Draws the brand mark, an impossible triangle built from cubes (Reutersvärd's
 // figure, the one Penrose later drew as a tribar), into public/logo.svg,
-// favicon.svg and og.svg. Run `bun scripts/brand-mark.ts`, then rasterize
+// favicon.svg and og.svg. Run `bun run brand:mark`, then rasterize
 // og.svg to og.png as the comment in that file says. All three are generated:
 // change the numbers here, not the files.
 //

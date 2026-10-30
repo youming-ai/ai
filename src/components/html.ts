@@ -27,7 +27,7 @@ const ENTITIES: Record<string, string> = {
   "'": '&#39;',
 };
 
-export const escapeHtml = (text: string): string => text.replace(/[&<>"']/g, (c) => ENTITIES[c]!);
+const escapeHtml = (text: string): string => text.replace(/[&<>"']/g, (c) => ENTITIES[c]!);
 
 function emit(value: HtmlValue): string {
   if (value instanceof Html) return value.value;

@@ -38,7 +38,7 @@ const LONE_LOW = /(?<![\ud800-\udbff])[\udc00-\udfff]/g;
 
 /** Escape XML special characters for RSS/sitemaps.
  *
- *  Escaping is not enough on its own: a stored title can carry characters that
+ *  Escaping is not enough on its own: a parsed title can carry characters that
  *  XML 1.0 cannot represent at all (numeric references decode to them, and JS
  *  `\s` — all `stripHtml` collapses — does not cover most of them). One such
  *  character makes the whole document non-well-formed, so every subscriber

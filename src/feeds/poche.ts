@@ -59,7 +59,7 @@ function sourceDomain(url: string): string {
   }
 }
 
-export function exploreArticle(item: FeedItem, id: string, url: string): ExploreArticle {
+function exploreArticle(item: FeedItem, id: string, url: string): ExploreArticle {
   return {
     id,
     title: item.title,
