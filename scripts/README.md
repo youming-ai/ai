@@ -25,7 +25,7 @@ bun run perf:probe --runs 3 --cpu 4 --net slow4g
 The board is the live Poche feed, fetched by the local Worker on its first
 request, so runs taken on different days measure different corpora and images.
 The recorded results below predate that: they were taken on a deterministic
-200-row board seeded into the D1 database the desk used to have.
+200-row seeded board.
 
 ## Recorded results
 
